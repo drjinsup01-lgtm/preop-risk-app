@@ -1339,23 +1339,14 @@ D-3 보류(3일전): ${dl(drugs.d3)}
 TnT: baseline → POD1 → POD2 / TnT ≥14 시 ECG 재시행
 Glucose q6h (DM 환자)
 
-[Alerts]
-${syn.alerts.length?syn.alerts.join('\n'):'주요 경고 없음'}
+[Risk Score]
+RCRI     : ${rcri.score}점 → ${rcri.class} (${rcri.risk})
+AUB-HAS2 : ${aub.score}점 → ${aub.cat} (${aub.pct})
+DASI     : ${dasi.total.toFixed(1)}점 → ${dasi.mets.toFixed(1)} METs (${dasi.adequate?'adequate':'poor'})
+CFS      : ${cfs?`${cfs.s} — ${cfs.label}`:'미입력'}
+SORT     : ${sort.sortRisk.toFixed(2)}% (BJS 2014)
 
-[종합해석]
-${syn.lines.join('\n')}
-
-[Risk Score 상세]
-RCRI     : ${rcri.score}점 → ${rcri.class} (30d MACE ${rcri.risk})
-AUB-HAS2 : ${aub.score}점 → ${aub.cat} (30d 참고 ${aub.pct})  — AUC 0.82
-DASI     : ${dasi.total.toFixed(2)}점 → ${dasi.mets.toFixed(1)} METs / VO₂peak ${dasi.vo2.toFixed(1)} mL/kg/min
-           FC: ${dasi.adequate?'adequate (DASI≥34, stress test 불필요)':'poor (DASI<34, 비침습적 심혈관 검사 고려)'}
-CFS      : ${cfs?`${cfs.s} — ${cfs.label} (30d생존 참고 ${cfs.surv}%)`:'미입력'}
-SORT     : ${sort.sortRisk.toFixed(3)}%
-           출처: BJS 2014 (Protopapa et al.) · 객관 파라미터 기반 모델 (임상의 추정 미포함)
-
-NCS Surgery Check V2.1 / ACC/AHA 2024 / BJS 2014
-※ AI-assisted — 임상 적용 전 원문 확인 권장`;
+NCS Surgery Check V2.1 / ACC/AHA 2024 / BJS 2014`;
 
     navigator.clipboard.writeText(emr).then(() => {
       const btn = document.getElementById('copy-btn');
