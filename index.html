@@ -115,6 +115,46 @@
           </div>
           <div id="proc-hint" class="text-xs font-semibold mt-1 min-h-[1.1rem]"></div>
         </div>
+        <!-- 진단 / 동반질환 -->
+        <div class="col-span-2 md:col-span-4 pt-1 border-t border-gray-100">
+          <label class="label">진단 <span class="text-gray-400 font-normal">— 주진단 · 동반질환 (EMR A섹션)</span></label>
+          <input type="text" id="pt-dx" class="inp" placeholder="예) HTN, DM2, CCD (2019~), Dyslipidemia, CKD G3b">
+        </div>
+        <!-- Vitals -->
+        <div class="col-span-2 md:col-span-4 pt-1 border-t border-gray-100">
+          <label class="label">Vitals <span class="text-gray-400 font-normal">(선택)</span></label>
+          <div class="grid grid-cols-5 gap-2">
+            <div><label class="label text-gray-400">SBP (mmHg)</label><input type="number" id="vs-sbp" class="inp" placeholder="120" oninput="render()"></div>
+            <div><label class="label text-gray-400">DBP (mmHg)</label><input type="number" id="vs-dbp" class="inp" placeholder="80" oninput="render()"></div>
+            <div><label class="label text-gray-400">HR (/min)</label><input type="number" id="vs-hr" class="inp" placeholder="72" oninput="render()"></div>
+            <div><label class="label text-gray-400">RR (/min)</label><input type="number" id="vs-rr" class="inp" placeholder="18" oninput="render()"></div>
+            <div><label class="label text-gray-400">BT (°C)</label><input type="number" id="vs-bt" class="inp" step="0.1" placeholder="36.5" oninput="render()"></div>
+          </div>
+        </div>
+        <!-- 추가 Labs -->
+        <div class="col-span-2 md:col-span-4 pt-1 border-t border-gray-100">
+          <label class="label">추가 검사 <span class="text-gray-400 font-normal">(선택)</span></label>
+          <div class="grid grid-cols-3 md:grid-cols-5 gap-2">
+            <div><label class="label text-gray-400">eGFR (mL/min)</label><input type="number" id="lab-egfr" class="inp" placeholder="75" oninput="render()"></div>
+            <div><label class="label text-gray-400">K (mEq/L)</label><input type="number" id="lab-k" class="inp" step="0.1" placeholder="4.0" oninput="render()"></div>
+            <div><label class="label text-gray-400">TnT (ng/L)</label><input type="number" id="lab-tnt" class="inp" step="0.01" placeholder="&lt;14" oninput="render()"></div>
+            <div><label class="label text-gray-400">proBNP (pg/mL)</label><input type="number" id="lab-probnp" class="inp" placeholder="125" oninput="render()"></div>
+            <div><label class="label text-gray-400">HbA1c (%)</label><input type="number" id="lab-hba1c" class="inp" step="0.1" placeholder="6.5" oninput="render()"></div>
+          </div>
+        </div>
+        <!-- ECG -->
+        <div class="col-span-2 md:col-span-4 pt-1 border-t border-gray-100">
+          <label class="label">ECG <span class="text-gray-400 font-normal">(선택)</span></label>
+          <input type="text" id="ecg-text" class="inp" placeholder="예) NSR 66, LVH, nonspecific T-wave changes">
+        </div>
+        <!-- Echo -->
+        <div class="col-span-2 md:col-span-4 pt-1 border-t border-gray-100">
+          <label class="label">Echo <span class="text-gray-400 font-normal">(선택)</span></label>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <div><label class="label text-gray-400">LVEF (%)</label><input type="number" id="echo-ef" class="inp" placeholder="55" min="0" max="100" oninput="render()"></div>
+            <div class="md:col-span-3"><label class="label text-gray-400">소견</label><input type="text" id="echo-text" class="inp" placeholder="예) diastolic dysfn Gr1, GLS -16%, no regional WMA"></div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1162,12 +1202,58 @@
     const drugs = getCheckedDrugs();
     const syn   = synthesize(rcri, aub, dasi, cfs, sort);
 
-    const sName = document.getElementById('surgery-name').value || '미입력';
-    const sDate = document.getElementById('surgery-date').value || '미입력';
-    const age   = document.getElementById('pt-age').value || '?';
-    const sex   = document.getElementById('pt-sex').value;
-    const emer  = document.getElementById('emergency').value;
-    const today = new Date().toLocaleDateString('ko-KR');
+    const sName  = document.getElementById('surgery-name').value || '미입력';
+    const sDate  = document.getElementById('surgery-date').value || '미입력';
+    const age    = document.getElementById('pt-age').value || '?';
+    const sex    = document.getElementById('pt-sex').value;
+    const emer   = document.getElementById('emergency').value;
+    const today  = new Date().toLocaleDateString('ko-KR');
+
+    // New fields
+    const dx     = document.getElementById('pt-dx').value;
+    const sbp    = document.getElementById('vs-sbp').value;
+    const dbp    = document.getElementById('vs-dbp').value;
+    const hrVal  = document.getElementById('vs-hr').value;
+    const rr     = document.getElementById('vs-rr').value;
+    const bt     = document.getElementById('vs-bt').value;
+    const hb     = document.getElementById('lab-hb').value;
+    const cr     = document.getElementById('lab-cr').value;
+    const egfr   = document.getElementById('lab-egfr').value;
+    const labK   = document.getElementById('lab-k').value;
+    const tnt    = document.getElementById('lab-tnt').value;
+    const probnp = document.getElementById('lab-probnp').value;
+    const hba1c  = document.getElementById('lab-hba1c').value;
+    const ecgTxt = document.getElementById('ecg-text').value || '미시행';
+    const echoEf = document.getElementById('echo-ef').value;
+    const echoTx = document.getElementById('echo-text').value;
+
+    // Format VS: SBP/DBP-HR-RR-BT
+    const vsStr = (sbp && dbp && hrVal)
+      ? `${sbp}/${dbp}-${hrVal}${rr?'-'+rr:''}${bt?'-'+bt:''}`
+      : '미입력';
+
+    // Format Labs
+    const labParts = [];
+    if (hb)     labParts.push(`Hb ${hb}`);
+    if (cr)     labParts.push(`Cr ${cr}`);
+    if (egfr)   labParts.push(`eGFR ${egfr}`);
+    if (labK)   labParts.push(`K ${labK}`);
+    if (tnt)    labParts.push(`TnT ${tnt}`);
+    if (probnp) labParts.push(`proBNP ${probnp}`);
+    if (hba1c)  labParts.push(`HbA1c ${hba1c}%`);
+    const labStr = labParts.length ? labParts.join(', ') : '미입력';
+
+    // Format Echo
+    let echoStr = '미시행';
+    if (echoEf || echoTx) {
+      const parts = [];
+      if (echoEf) parts.push(`LVEF ${echoEf}%`);
+      if (echoTx) parts.push(echoTx);
+      echoStr = parts.join(', ');
+    }
+
+    // Preop risk summary line (A섹션용)
+    const preopRisk = `RCRI ${rcri.score}점 (${rcri.class}, MACE ${rcri.risk}), AUB-HAS2 ${aub.score}점 (${aub.cat}), DASI ${dasi.mets.toFixed(1)} METs (${dasi.adequate?'adequate':'poor'}), CFS ${cfs?cfs.s:'-'}, SORT ${sort.sortRisk.toFixed(2)}%`;
 
     const dl = (list) => list.length ? list.map(d=>d.note?`${d.disp}(${d.note})`:d.disp).join(', ') : '없음';
 
@@ -1177,7 +1263,30 @@
 환자: ${age}세/${sex}
 수술: ${sName} (${sDate}, ${emer})
 
-[Risk Score 결과]
+O) VS ${vsStr}
+   ECG: ${ecgTxt}
+   Lab: ${labStr}
+   Echo: ${echoStr}
+
+A) ${dx || '(진단 미입력)'}
+   Preop risk: ${preopRisk}
+   → ${syn.category}
+
+P)
+유지(수술 당일): ${dl(drugs.maintain)}
+D-1 보류(전날) : ${dl(drugs.d1)}
+D-3 보류(3일전): ${dl(drugs.d3)}
+중단(기간별)   : ${dl(drugs.stop)}
+TnT: baseline → POD1 → POD2 / TnT ≥14 시 ECG 재시행
+Glucose q6h (DM 환자)
+
+[Alerts]
+${syn.alerts.length?syn.alerts.join('\n'):'주요 경고 없음'}
+
+[종합해석]
+${syn.lines.join('\n')}
+
+[Risk Score 상세]
 RCRI     : ${rcri.score}점 → ${rcri.class} (30d MACE ${rcri.risk})
 AUB-HAS2 : ${aub.score}점 → ${aub.cat} (30d 참고 ${aub.pct})  — AUC 0.82
 DASI     : ${dasi.total.toFixed(2)}점 → ${dasi.mets.toFixed(1)} METs / VO₂peak ${dasi.vo2.toFixed(1)} mL/kg/min
@@ -1186,29 +1295,7 @@ CFS      : ${cfs?`${cfs.s} — ${cfs.label} (30d생존 참고 ${cfs.surv}%)`:'�
 SORT     : ${sort.sortRisk.toFixed(3)}%
            출처: BJS 2014 (Protopapa et al.) · 객관 파라미터 기반 모델 (임상의 추정 미포함)
 
-[최종 판정]
-→ ${syn.category}
-   ${syn.sub}
-
-[종합해석]
-${syn.lines.join('\n')}
-
-[약물 관리]
-유지(수술 당일): ${dl(drugs.maintain)}
-D-1 보류(전날) : ${dl(drugs.d1)}
-D-3 보류(3일전): ${dl(drugs.d3)}
-중단(기간별)   : ${dl(drugs.stop)}
-
-[Alerts]
-${syn.alerts.length?syn.alerts.join('\n'):'주요 경고 없음'}
-
-[술후 모니터링]
-- TnT: baseline → POD1 → POD2
-- TnT ≥14 시 12-lead ECG 재시행
-- Glucose q6h (DM 환자)
-- BP/HR 목표: 수술 팀과 협의
-
-출처: NCS Surgery Check V2.1 / ACC/AHA 2024 / PLOS Med 2020
+NCS Surgery Check V2.1 / ACC/AHA 2024 / BJS 2014
 ※ AI-assisted — 임상 적용 전 원문 확인 권장`;
 
     navigator.clipboard.writeText(emr).then(() => {
@@ -1250,6 +1337,12 @@ ${syn.alerts.length?syn.alerts.join('\n'):'주요 경고 없음'}
     _sg.innerHTML = '<option value="">② Sub Group 선택...</option>'; _sg.disabled = true;
     _sp.innerHTML = '<option value="">③ Procedure 선택...</option>';  _sp.disabled = true;
     document.getElementById('proc-hint').textContent = '';
+    ['pt-dx','vs-sbp','vs-dbp','vs-hr','vs-rr','vs-bt',
+     'lab-egfr','lab-k','lab-tnt','lab-probnp','lab-hba1c',
+     'ecg-text','echo-ef','echo-text'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
     updateDrugCats();
     render();
   }
