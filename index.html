@@ -370,20 +370,17 @@
         <div class="text-sm mt-1 text-gray-600" id="final-sub"></div>
       </div>
 
-      <div id="alerts-box" class="space-y-2 mb-4"></div>
-
-      <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm">
-        <div class="font-semibold text-blue-900 mb-1">종합해석</div>
-        <div id="synthesis-text" class="text-gray-700 space-y-1"></div>
-      </div>
+      <!-- alerts / synthesis: 화면 표시 제거 (JS 연산은 유지) -->
+      <div id="alerts-box" class="hidden"></div>
+      <div class="hidden"><div id="synthesis-text"></div></div>
 
       <button onclick="copyEMR()"
         class="w-full bg-blue-900 hover:bg-blue-800 active:bg-blue-950 text-white font-bold py-3 rounded-xl text-sm transition"
         id="copy-btn">
-        📋 EMR 복사용 텍스트 생성 &amp; 클립보드 복사
+        📋 EMR 복사
       </button>
       <div id="emr-box" class="hidden mt-3">
-        <pre id="emr-text" class="bg-gray-900 text-green-300 text-xs p-4 rounded-xl overflow-auto max-h-80"></pre>
+        <pre id="emr-text" class="bg-gray-900 text-green-300 text-xs p-4 rounded-xl overflow-auto max-h-96"></pre>
       </div>
     </section>
 
@@ -392,8 +389,7 @@
         class="bg-gray-200 hover:bg-gray-300 text-gray-600 px-6 py-2 rounded-xl text-sm transition">
         전체 초기화
       </button>
-      <p class="text-xs text-gray-400 mt-2">Clinical Content v2025-04 · NCS Surgery Check V2.1 · ACC/AHA 2024 · PLOS Med 2020</p>
-      <p class="text-xs text-gray-400">AI-assisted tool — 임상 적용 전 원문 확인 권장</p>
+      <p class="text-xs text-gray-400 mt-2">NCS Surgery Check V2.1 · ACC/AHA 2024 · BJS 2014</p>
     </div>
 
   </main>
