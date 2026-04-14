@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>수술전 심혈관 위험도 평가 · NCS Surgery Check V2.1</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+    body { font-family: 'Noto Sans KR', sans-serif; }
+    .check-item:hover { background: #eff6ff; }
+    .cfs-card { transition: all 0.15s; cursor: pointer; }
+    .cfs-card.selected { border-color: #1d4ed8 !important; background: #eff6ff; }
+    .risk-low  { color: #15803d; }
+    .risk-int  { color: #b45309; }
+    .risk-high { color: #b91c1c; }
+    pre { white-space: pre-wrap; word-break: break-all; }
+    .section-card { animation: fadeIn 0.25s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; } }
+    .label { display:block; font-size:.75rem; font-weight:500; color:#374151; margin-bottom:.25rem; }
+    .inp   { width:100%; border:1px solid #d1d5db; border-radius:.5rem; padding:.4rem .6rem; font-size:.85rem; outline:none; }
+    .inp:focus { border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,.15); }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+  <!-- ===== STICKY HEADER ===== -->
+  <header class="bg-blue-900 text-white shadow-lg sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <div class="text-base font-bold leading-tight">수술전 심혈관 위험도 평가</div>
+        <div class="text-blue-300 text-xs">NCS Surgery Check V2.1 · ACC/AHA 2024 · PLOS Med 2020</div>
+      </div>
+      <div class="flex flex-wrap gap-2 text-xs">
+        <span class="bg-blue-800 border border-blue-600 rounded px-2 py-1">RCRI: <b id="h-rcri">-</b></span>
+        <span class="bg-blue-800 border border-blue-600 rounded px-2 py-1">AUB-HAS2: <b id="h-aub">-</b></span>
+        <span class="bg-blue-800 border border-blue-600 rounded px-2 py-1">DASI: <b id="h-dasi">-</b></span>
+        <span class="bg-blue-800 border border-blue-600 rounded px-2 py-1">CFS: <b id="h-cfs">-</b></span>
+        <span class="bg-blue-800 border border-blue-600 rounded px-2 py-1">SORT: <b id="h-sort">-</b></span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-5 space-y-5">
+
+    <!-- ===== 1. 환자 기본정보 ===== -->
+    <section class="section-card bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+      <h2 class="text-blue-900 font-bold text-base mb-4 flex items-center gap-2">
+        <span class="bg-blue-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">1</span>
+        환자 기본정보
+      </h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="col-span-2">
+          <label class="label">수술명</label>
+          <input type="text" id="surgery-name" class="inp" placeholder="예) Lt humerus shaft ORIF">
+        </div>
+        <div>
+          <label class="label">수술 예정일</label>
+          <input type="date" id="surgery-date" class="inp">
+        </div>
+        <div>
+          <label class="label">응급 여부</label>
+          <select id="emergency" class="inp" onchange="autoFill()">
+            <option value="elective">Elective (계획)</option>
+            <option value="expedited">Expedited</option>
+            <option value="urgent">Urgent</option>
+            <option value="emergency">Emergency (응급)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">나이 (만)</label>
+          <input type="number" id="pt-age" class="inp" placeholder="예) 76" min="0" max="120" oninput="autoFill()">
+        </div>
+        <div>
+          <label class="label">성별</label>
+          <select id="pt-sex" class="inp" onchange="render()">
+            <option value="M">남성 (M)</option>
+            <option value="F">여성 (F)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Creatinine (mg/dL)</label>
+          <input type="number" id="lab-cr" class="inp" step="0.01" placeholder="예) 0.9" oninput="autoFill()">
+        </div>
+        <div>
+          <label class="label">Hemoglobin (g/dL)</label>
+          <input type="number" id="lab-hb" class="inp" step="0.1" placeholder="예) 12.7" oninput="autoFill()">
+        </div>
+        <!-- 수술 분류 3단계 — sortsurgery.com 체계 · RCRI/SORT 자동 설정 -->
+        <div class="col-span-2 md:col-span-4 pt-1 border-t border-gray-100">
+          <label class="label">수술 분류 <span class="text-gray-400 font-normal">— sortsurgery.com 체계 · Specialty/Severity/RCRI 자동 설정</span></label>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <select id="sort-maingroup" class="inp" onchange="onMainGroup(this.value)">
+              <option value="">① Main Group 선택...</option>
+              <option value="Thorax">Thorax and intra-thoracic organs</option>
+              <option value="Vascular">Vascular System</option>
+              <option value="Abdomen">Abdomen (excluding urinary and reproductive organs)</option>
+              <option value="EndoGI">Endoscopic gastrointestinal procedures</option>
+              <option value="Bones">Bones, joints and connective tissue / tendon muscle</option>
+              <option value="Urinary">Urinary system and male reproductive organs</option>
+              <option value="Female">Female reproductive organs</option>
+              <option value="Spine">Spine</option>
+              <option value="FaceMouth">Face, mouth, salivary and thyroid</option>
+              <option value="ENT">Ear, nose and throat</option>
+              <option value="Breast">Breast</option>
+              <option value="Skin">Skin and subcutaneous tissue</option>
+              <option value="Neuro">Neurosurgery (Brain, cranium and intracranial organs)</option>
+            </select>
+            <select id="sort-subgroup" class="inp" disabled onchange="onSubGroup(this.value)">
+              <option value="">② Sub Group 선택...</option>
+            </select>
+            <select id="sort-proc" class="inp" disabled onchange="onProcedure(this.value)">
+              <option value="">③ Procedure Description 선택...</option>
+            </select>
+          </div>
+          <div id="proc-hint" class="text-xs font-semibold mt-1 min-h-[1.1rem]"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 2 & 3. RCRI + AUB-HAS2 ===== -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <!-- RCRI -->
+      <section class="section-card bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <h2 class="text-blue-900 font-bold text-base flex items-center gap-2">
+              <span class="bg-blue-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2</span>
+              RCRI
+            </h2>
+            <p class="text-xs text-gray-400 mt-0.5 ml-8">Revised Cardiac Risk Index · AHA 2024 Table 4</p>
+          </div>
+          <div class="text-right">
+            <div class="text-3xl font-black" id="rcri-score">0</div>
+            <div class="text-xs text-gray-500">점</div>
+            <div class="text-sm font-bold mt-1" id="rcri-class">Class I</div>
+            <div class="text-xs text-gray-500" id="rcri-risk">MACE 3.9%</div>
+          </div>
+        </div>
+        <div class="space-y-2" id="rcri-list"></div>
+      </section>
+
+      <!-- AUB-HAS2 -->
+      <section class="section-card bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <h2 class="text-blue-900 font-bold text-base flex items-center gap-2">
+              <span class="bg-blue-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">3</span>
+              AUB-HAS2
+            </h2>
+            <p class="text-xs text-gray-400 mt-0.5 ml-8">Am J Cardiol 2017 · AUC 0.82 (RCRI 0.64)</p>
+          </div>
+          <div class="text-right">
+            <div class="text-3xl font-black" id="aub-score">0</div>
+            <div class="text-xs text-gray-500">점</div>
+            <div class="text-sm font-bold mt-1" id="aub-class">LOW</div>
+            <div class="text-xs text-gray-500" id="aub-risk">참고: &lt;5%</div>
+          </div>
+        </div>
+        <div class="space-y-2" id="aub-list"></div>
+      </section>
+    </div>
+
+    <!-- ===== 4. DASI ===== -->
+    <section class="section-card bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+      <div class="flex items-start justify-between mb-4">
+        <div>
+          <h2 class="text-blue-900 font-bold text-base flex items-center gap-2">
+            <span class="bg-blue-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">4</span>
+            DASI (Duke Activity Status Index)
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5 ml-8">2024 ACC/AHA: DASI ≥34 → adequate · VO₂peak=0.43×DASI+9.6 · METs=VO₂peak/3.5</p>
+        </div>
+        <div class="text-right min-w-[110px]">
+          <div class="text-3xl font-black" id="dasi-mets">0.0</div>
+          <div class="text-xs text-gray-500">METs</div>
+          <div class="text-sm font-bold mt-1" id="dasi-status">poor FC</div>
+          <div class="text-xs text-gray-400" id="dasi-detail">총점: 0.00</div>
+          <div class="text-xs mt-1 font-semibold" id="dasi-flag"></div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="dasi-list"></div>
+    </section>
+
+    <!-- ===== 5. CFS ===== -->
+    <section class="section-card bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+      <div class="flex items-start justify-between mb-4">
+        <div>
+          <h2 class="text-blue-900 font-bold text-base flex items-center gap-2">
+            <span class="bg-blue-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">5</span>
+            CFS (Clinical Frailty Scale)
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5 ml-8">해당 항목을 클릭하여 선택 · 30d 생존율은 참고값 (코호트 의존)</p>
+        </div>
+        <div class="text-right" id="cfs-badge-box"></div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2" id="cfs-list"></div>
+    </section>
+
+    <!-- ===== 6. 약물 관리 ===== -->
+    <section class="section-card bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+      <h2 class="text-blue-900 font-bold text-base mb-4 flex items-center gap-2">
+        <span class="bg-blue-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">6</span>
+        현재 약물 → 4카테고리 자동 분류
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 mb-5 border-b pb-4" id="drug-list"></div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="rounded-xl border-2 border-green-300 bg-green-50 p-3">
+          <div class="text-xs font-bold text-green-800 mb-2">✅ 유지 (수술 당일 복용)</div>
+          <ul class="text-xs space-y-0.5" id="cat-maintain"></ul>
+        </div>
+        <div class="rounded-xl border-2 border-yellow-300 bg-yellow-50 p-3">
+          <div class="text-xs font-bold text-yellow-800 mb-2">⏸ D-1 보류 (전날 중단)</div>
+          <ul class="text-xs space-y-0.5" id="cat-d1"></ul>
+        </div>
+        <div class="rounded-xl border-2 border-orange-300 bg-orange-50 p-3">
+          <div class="text-xs font-bold text-orange-800 mb-2">⏸ D-3 보류 (3일 전 중단)</div>
+          <ul class="text-xs space-y-0.5" id="cat-d3"></ul>
+        </div>
+        <div class="rounded-xl border-2 border-red-300 bg-red-50 p-3">
+          <div class="text-xs font-bold text-red-800 mb-2">🛑 중단 (기간별)</div>
+          <ul class="text-xs space-y-0.5" id="cat-stop"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 7. SORT 직접 계산 ===== -->
+    <section class="section-card bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+      <div class="flex items-start justify-between mb-4 border-b pb-3">
+        <div>
+          <h2 class="text-blue-900 font-bold text-base flex items-center gap-2">
+            <span class="bg-blue-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">7</span>
+            SORT — 로짓 직접 계산
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5 ml-8">
+            Protopapa et al., BJS 2014 · β₀=−7.366 · 객관 파라미터 기반 (임상의 추정 미포함) · AUC 0.82
+          </p>
+        </div>
+        <div class="text-right min-w-[130px]">
+          <div class="text-xs text-gray-400">SORT 30일 사망</div>
+          <div class="text-3xl font-black" id="sort-v2-pct">-</div>
+          <div class="text-xs text-gray-500">% (BJS 2014)</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        <div>
+          <label class="label">ASA-PS</label>
+          <select id="sort-asa" class="inp" onchange="render()">
+            <option value="1">1 — 정상 건강</option>
+            <option value="2">2 — 경등도 전신질환</option>
+            <option value="3" selected>3 — 중증 전신질환</option>
+            <option value="4">4 — 생명 위협적 전신질환</option>
+            <option value="5">5 — 수술 없이 생존 불가</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">응급도 (Urgency)</label>
+          <select id="sort-urgency" class="inp" onchange="render()">
+            <option value="elective">Elective (계획 수술)</option>
+            <option value="expedited">Expedited</option>
+            <option value="urgent">Urgent</option>
+            <option value="immediate">Immediate (응급)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">고위험 전문과 <span class="text-gray-400 font-normal">(GI·흉부·혈관)</span></label>
+          <select id="sort-specialty" class="inp" onchange="render()">
+            <option value="0">아니오</option>
+            <option value="1">예</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Complex Major <span class="text-gray-400 font-normal">(Xmajor)</span></label>
+          <select id="sort-severity" class="inp" onchange="render()">
+            <option value="0">아니오 (Minor / Major)</option>
+            <option value="1">예 (Complex Major)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">악성종양 (Cancer)</label>
+          <select id="sort-cancer" class="inp" onchange="render()">
+            <option value="0">아니오</option>
+            <option value="1">예</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">연령대</label>
+          <select id="sort-age" class="inp" onchange="render()">
+            <option value="lt65">&lt; 65세</option>
+            <option value="65-79">65 – 79세</option>
+            <option value="gte80">≥ 80세</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Logit formula live display (hidden) -->
+      <div class="hidden" id="sort-formula"></div>
+    </section>
+
+    <!-- ===== 8. 최종 결과 ===== -->
+    <section class="section-card bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+      <h2 class="text-blue-900 font-bold text-base mb-4 flex items-center gap-2">
+        <span class="bg-blue-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">8</span>
+        종합 결과 &amp; Final Recommendation
+      </h2>
+      <div class="overflow-x-auto mb-4">
+        <table class="w-full text-sm border-collapse">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="text-left p-2 border border-gray-200 font-semibold">Score</th>
+              <th class="text-center p-2 border border-gray-200 font-semibold">값</th>
+              <th class="text-center p-2 border border-gray-200 font-semibold">분류</th>
+              <th class="text-left p-2 border border-gray-200 font-semibold">해석</th>
+            </tr>
+          </thead>
+          <tbody id="result-tbody"></tbody>
+        </table>
+      </div>
+
+      <div id="final-rec" class="rounded-2xl border-2 p-5 text-center mb-4">
+        <div class="text-2xl font-black" id="final-label">데이터 입력 후 자동 계산</div>
+        <div class="text-sm mt-1 text-gray-600" id="final-sub"></div>
+      </div>
+
+      <div id="alerts-box" class="space-y-2 mb-4"></div>
+
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm">
+        <div class="font-semibold text-blue-900 mb-1">종합해석</div>
+        <div id="synthesis-text" class="text-gray-700 space-y-1"></div>
+      </div>
+
+      <button onclick="copyEMR()"
+        class="w-full bg-blue-900 hover:bg-blue-800 active:bg-blue-950 text-white font-bold py-3 rounded-xl text-sm transition"
+        id="copy-btn">
+        📋 EMR 복사용 텍스트 생성 &amp; 클립보드 복사
+      </button>
+      <div id="emr-box" class="hidden mt-3">
+        <pre id="emr-text" class="bg-gray-900 text-green-300 text-xs p-4 rounded-xl overflow-auto max-h-80"></pre>
+      </div>
+    </section>
+
+    <div class="text-center pb-8">
+      <button onclick="resetAll()"
+        class="bg-gray-200 hover:bg-gray-300 text-gray-600 px-6 py-2 rounded-xl text-sm transition">
+        전체 초기화
+      </button>
+      <p class="text-xs text-gray-400 mt-2">Clinical Content v2025-04 · NCS Surgery Check V2.1 · ACC/AHA 2024 · PLOS Med 2020</p>
+      <p class="text-xs text-gray-400">AI-assisted tool — 임상 적용 전 원문 확인 권장</p>
+    </div>
+
+  </main>
+
+  <script>
+  // ================================================================
+  // CONSTANTS
+  // ================================================================
+
+  const RCRI_ITEMS = [
+    { id:'rcri_hisurg', label:'고위험 수술',            hint:'복강내·흉곽내·대혈관 수술 (정형외과 ORIF 해당 안됨)' },
+    { id:'rcri_ihd',    label:'허혈성 심질환 (IHD)',    hint:'CAD, MI 병력, 협심증, 스트레스 테스트 양성' },
+    { id:'rcri_chf',    label:'심부전 (CHF) 병력',     hint:'HF 병력, 폐부종, S3, 수포음' },
+    { id:'rcri_cvd',    label:'뇌혈관 질환 (CVD)',     hint:'뇌졸중, TIA 병력' },
+    { id:'rcri_ins',    label:'인슐린 사용 DM',         hint:'인슐린 주사 사용 — 경구약만인 경우 해당 안됨' },
+    { id:'rcri_cr',     label:'Creatinine ≥ 2.0 mg/dL', hint:'수술 전 혈청 크레아티닌 2.0 이상' },
+  ];
+  const RCRI_TABLE = [
+    { class:'Class I',   risk:'3.9%', color:'risk-low'  },
+    { class:'Class II',  risk:'6.0%', color:'risk-int'  },
+    { class:'Class III', risk:'10.1%', color:'risk-int' },
+    { class:'Class IV',  risk:'≥15%', color:'risk-high' },
+  ];
+
+  const AUB_ITEMS = [
+    { id:'aub_h1', label:'H1: 심질환 기왕력',        hint:'IHD, HF, 판막질환, 부정맥 기왕력' },
+    { id:'aub_h2', label:'H2: 협심증/호흡곤란 증상', hint:'증상 있거나 심장 약물 복용 중' },
+    { id:'aub_a1', label:'A1: 나이 ≥ 75세',          hint:'만 75세 이상' },
+    { id:'aub_a2', label:'A2: 빈혈 (Hb < 12 g/dL)', hint:'헤모글로빈 12 미만' },
+    { id:'aub_s1', label:'S1: 혈관 수술',             hint:'대동맥, 말초혈관 수술' },
+    { id:'aub_s2', label:'S2: 응급 수술',             hint:'Emergency 또는 Urgent 수술' },
+  ];
+
+  const DASI_ITEMS = [
+    { id:'da01', label:'자기 돌봄 (세면, 식사, 화장실)',          w:2.75 },
+    { id:'da02', label:'집안 보행',                               w:1.75 },
+    { id:'da03', label:'평지 1-2블록 보행',                       w:2.75 },
+    { id:'da04', label:'경사면 / 계단 1층 오르기',                w:5.50 },
+    { id:'da05', label:'짧은 거리 달리기',                        w:8.00 },
+    { id:'da06', label:'가벼운 집안일 (설거지, 청소)',             w:2.70 },
+    { id:'da07', label:'중등도 집안일 (청소기, 장보기)',           w:3.50 },
+    { id:'da08', label:'무거운 집안일 (마루청소, 가구 이동)',      w:8.00 },
+    { id:'da09', label:'정원/야외 작업 (낙엽쓸기, 잔디깎기)',     w:4.50 },
+    { id:'da10', label:'성관계',                                   w:5.25 },
+    { id:'da11', label:'중등도 레크리에이션 (골프, 볼링, 댄스)',  w:6.00 },
+    { id:'da12', label:'격렬한 스포츠 (수영, 테니스, 농구)',      w:7.50 },
+  ]; // max = 58.20
+
+  const CFS_DATA = [
+    { s:1, label:'Very Fit',             surv:99, color:'text-green-700',
+      desc:'규칙적 운동, 체력 최상',
+      ex:'마라톤·수영·자전거 등 격렬한 운동 규칙적으로 가능' },
+    { s:2, label:'Well',                 surv:98, color:'text-green-600',
+      desc:'활동적, 규칙적 운동, 증상 없음',
+      ex:'빠른 보행, 계단 여러 층, 장거리 산책 가능' },
+    { s:3, label:'Managing Well',        surv:96, color:'text-green-500',
+      desc:'질환 있으나 독립적 일상 유지',
+      ex:'외출·장보기·운전 혼자 가능. 가끔 피로' },
+    { s:4, label:'Living with Very Mild Frailty', surv:93, color:'text-yellow-600',
+      desc:'독립적이나 느림. 일부 IADL 어려움',
+      ex:'집안 보행 OK. 계단 천천히 가능. 장거리 외출 어려움' },
+    { s:5, label:'Mildly Frail',         surv:89, color:'text-yellow-700',
+      desc:'IADL에 도움 필요 (장보기, 재정, 교통)',
+      ex:'집 안에서는 독립. 외출 시 동행 필요. 가사 일부 못함' },
+    { s:6, label:'Moderately Frail',    surv:82, color:'text-orange-600',
+      desc:'집안일·외출 모두 도움 필요',
+      ex:'샤워·이동 부분 도움. 식사는 독립 가능' },
+    { s:7, label:'Severely Frail',       surv:72, color:'text-red-600',
+      desc:'ADL 완전 의존. 침상 생활 가능성',
+      ex:'기저귀 또는 방광 카테터. 상반신 이동 도움 필요' },
+    { s:8, label:'Very Severely Frail',  surv:55, color:'text-red-700',
+      desc:'완전 의존. 말기에 가까운 상태',
+      ex:'침상 완전 의존. 최소 자극에도 반응 저하' },
+    { s:9, label:'Terminally Ill',       surv:30, color:'text-red-900',
+      desc:'기대 수명 6개월 미만',
+      ex:'수술 외 이유로 사망 임박. 완화 치료 중' },
+  ];
+
+  const DRUGS = [
+    // MAINTAIN
+    { id:'drg01', name:'Beta-blocker (bisoprolol, metoprolol, carvedilol)', disp:'BB',                cat:'maintain' },
+    { id:'drg02', name:'Propranolol / Atenolol',                            disp:'Propranolol',       cat:'maintain' },
+    { id:'drg03', name:'Statin (rosuvastatin, atorvastatin, pitavastatin)', disp:'Statin',            cat:'maintain' },
+    { id:'drg04', name:'Levothyroxine (씬지로이드)',                         disp:'Levothyroxine',    cat:'maintain' },
+    { id:'drg05', name:'Diltiazem / Verapamil (rate control)',              disp:'Diltiazem/Verapamil', cat:'maintain' },
+    { id:'drg06', name:'Amlodipine (CCB, 단독)',                            disp:'Amlodipine',       cat:'maintain' },
+    { id:'drg07', name:'PPI (오메프라졸, 판토프라졸, 라베프라졸)',             disp:'PPI',              cat:'maintain' },
+    { id:'drg08', name:'Nitrate (ISDN, 이소솔바이드)',                       disp:'Nitrate',          cat:'maintain' },
+    { id:'drg09', name:'Trimetazidine (트리메타지딘)',                       disp:'Trimetazidine',    cat:'maintain' },
+    { id:'drg10', name:'Digoxin',                                           disp:'Digoxin',          cat:'maintain', note:'신기능 모니터' },
+    // D-1
+    { id:'drg20', name:'ACEi (ramipril, perindopril, lisinopril)',          disp:'ACEi',             cat:'d1', note:'저혈압' },
+    { id:'drg21', name:'ARB (telmisartan, valsartan, losartan)',            disp:'ARB',              cat:'d1', note:'저혈압' },
+    { id:'drg22', name:'ARB+CCB 복합제 (프리트윈, 엑스포지 등)',              disp:'ARB+CCB 복합',    cat:'d1', note:'저혈압' },
+    { id:'drg23', name:'Thiazide 이뇨제 (HCT, 인다파미드)',                 disp:'Thiazide',         cat:'d1', note:'탈수' },
+    { id:'drg24', name:'Loop 이뇨제 (Furosemide, Torasemide)',             disp:'Loop 이뇨제',       cat:'d1', note:'탈수' },
+    { id:'drg25', name:'Spironolactone / Eplerenone (MRA)',                disp:'MRA',               cat:'d1', note:'저혈압/고K' },
+    { id:'drg26', name:'Metformin (메트포르민)',                            disp:'Metformin',         cat:'d1', note:'젖산증' },
+    { id:'drg27', name:'SU (glimepiride, gliclazide)',                     disp:'SU',                cat:'d1', note:'저혈당' },
+    { id:'drg28', name:'DPP-4i (teneligliptin, sitagliptin, alogliptin)',  disp:'DPP-4i',            cat:'d1' },
+    { id:'drg29', name:'GLP-1 RA 경구 (세마글루타이드 경구)',                 disp:'GLP-1 RA 경구',   cat:'d1' },
+    // D-3
+    { id:'drg40', name:'SGLT2i (dapagliflozin, empagliflozin, canagliflozin)', disp:'SGLT2i ⚠',    cat:'d3', note:'수술관련 DKA' },
+    { id:'drg41', name:'NSAIDs (aceclofenac, diclofenac, celecoxib)',      disp:'NSAIDs',            cat:'d3', note:'출혈/신기능' },
+    { id:'drg42', name:'GLP-1 RA 주사 (dulaglutide, semaglutide)',         disp:'GLP-1 RA 주사',    cat:'d3', note:'위마비 위험' },
+    // STOP
+    { id:'drg50', name:'Aspirin (아스피린)',    disp:'Aspirin',    cat:'stop', note:'D-7' },
+    { id:'drg51', name:'Clopidogrel (플라빅스)', disp:'Clopidogrel', cat:'stop', note:'D-5' },
+    { id:'drg52', name:'Ticagrelor (브릴린타)', disp:'Ticagrelor', cat:'stop', note:'D-3~5' },
+    { id:'drg53', name:'Prasugrel (에피언트)',  disp:'Prasugrel',  cat:'stop', note:'D-7' },
+    { id:'drg54', name:'Warfarin (쿠마딘)',     disp:'Warfarin',   cat:'stop', note:'D-5 (bridge 고려)' },
+    { id:'drg55', name:'Dabigatran (프라닥사)', disp:'Dabigatran', cat:'stop', note:'CrCl별 D-2~5' },
+    { id:'drg56', name:'Rivaroxaban (자렐토)', disp:'Rivaroxaban', cat:'stop', note:'D-2 (CrCl<30: D-3)' },
+    { id:'drg57', name:'Apixaban (엘리퀴스)',  disp:'Apixaban',   cat:'stop', note:'D-2 (CrCl<30: D-3)' },
+    { id:'drg58', name:'Edoxaban (릭시아나)', disp:'Edoxaban',    cat:'stop', note:'D-2 (CrCl<30: D-3)' },
+  ];
+
+  // ----------------------------------------------------------------
+  // SORT 수술 분류 데이터 — sortsurgery.com 3단계 체계 기반
+  // tgv: Thoracics/GI/Vascular specialty (SORT BJS 2014 coeff 0.712)
+  // 각 procedure: [severity('minor'|'intermediate'|'major'|'xmajor'), rcri_hint]
+  // rcri_hint: RCRI 고위험 수술 해당 여부 힌트 (자동 체크 안 함 — 의사 확인)
+  // ----------------------------------------------------------------
+  const SORT_PROCS = {
+    Thorax: {
+      label: 'Thorax and intra-thoracic organs', tgv: 1,
+      subs: {
+        '심장 수술 (Cardiac)': {
+          'CABG (관상동맥우회술)':            ['xmajor', 'RCRI: 흉강내 수술 해당'],
+          '판막치환술 (SAVR/MVR)':             ['xmajor', 'RCRI: 흉강내 수술 해당'],
+          '판막성형술 (valvuloplasty)':         ['xmajor', 'RCRI: 흉강내 수술 해당'],
+          'CABG + 판막 복합 수술':             ['xmajor', 'RCRI: 흉강내 수술 해당'],
+          '심막절제술 (pericardiectomy)':       ['xmajor', 'RCRI: 흉강내 수술 해당'],
+        },
+        '폐/기관지 수술 (Pulmonary)': {
+          '폐엽절제술 (lobectomy)':            ['xmajor', 'RCRI: 흉강내 수술 해당'],
+          '전폐절제술 (pneumonectomy)':         ['xmajor', 'RCRI: 흉강내 수술 해당'],
+          '쐐기절제술 (wedge resection)':       ['major',  'RCRI: 흉강내 수술 해당'],
+          '흉강경 수술 VATS (소규모)':          ['major',  'RCRI: 흉강내 수술 해당'],
+          '흉막유착술 / 흉관삽입':              ['intermediate', 'RCRI: 해당 미미'],
+        },
+        '흉부 식도/대동맥': {
+          '식도절제술 (esophagectomy)':         ['xmajor', 'RCRI: 흉강내+복강내 수술 해당'],
+          '상행대동맥 치환':                    ['xmajor', 'RCRI: 흉강내 대혈관 해당'],
+          '대동맥궁 치환 (arch replacement)':   ['xmajor', 'RCRI: 흉강내 대혈관 해당'],
+          '흉부하행대동맥 스텐트 (TEVAR)':      ['major',  'RCRI: 흉강내 해당'],
+        },
+      }
+    },
+    Vascular: {
+      label: 'Vascular System', tgv: 1,
+      subs: {
+        '복부대동맥 (Aortic)': {
+          '복부대동맥류 개복 (Open AAA)':       ['xmajor', 'RCRI: 대혈관(상서혜부) 해당'],
+          '복부대동맥류 스텐트 (EVAR)':         ['major',  'RCRI: 대혈관(상서혜부) 해당'],
+          '장골동맥 수술':                      ['major',  'RCRI: 대혈관(상서혜부) 해당'],
+        },
+        '경동맥 (Carotid)': {
+          '경동맥내막절제술 (CEA)':             ['major',  'RCRI: 대혈관(상서혜부) 해당'],
+          '경동맥 스텐트 (CAS)':               ['intermediate', 'RCRI: 경미 (하서혜부에 준함)'],
+        },
+        '하지 혈관 (Peripheral)': {
+          '대퇴-슬와 혈관우회술 (fem-pop)':     ['xmajor', 'RCRI: 대혈관(상서혜부) 해당'],
+          '하지 혈관우회술 (below knee)':       ['major',  'RCRI: 해당 여부 확인'],
+          '하지 혈관성형술/스텐트 (PTA)':       ['intermediate', 'RCRI: 해당 없음(하서혜부)'],
+          '하지 절단술 (amputation)':           ['major',  'RCRI: 해당 없음'],
+        },
+        '투석접근로': {
+          'AV fistula 조성술':                 ['minor',  'RCRI: 해당 없음'],
+          'AV graft 조성술':                   ['intermediate', 'RCRI: 해당 없음'],
+        },
+      }
+    },
+    Abdomen: {
+      label: 'Abdomen (excluding urinary and reproductive organs)', tgv: 1,
+      subs: {
+        '대장/직장 (Colorectal)': {
+          '대장절제술 개복 (open colectomy)':   ['xmajor', 'RCRI: 복강내 수술 해당'],
+          '대장절제술 복강경 (lap colectomy)':   ['major',  'RCRI: 해당 여부 확인(복강경)'],
+          '직장절제술 LAR/APR':                 ['xmajor', 'RCRI: 복강내 수술 해당'],
+          '장루조성술 (stoma formation)':        ['major',  'RCRI: 복강내 수술 해당'],
+          '충수절제술 복강경 (lap appy)':        ['intermediate', 'RCRI: 해당 없음(복강경 저위험)'],
+          '충수절제술 개복 (open appy)':         ['major',  'RCRI: 복강내 수술 해당'],
+        },
+        '상부위장관 (Upper GI)': {
+          '위절제술 (gastrectomy)':              ['xmajor', 'RCRI: 복강내 수술 해당'],
+          '소장절제술':                          ['xmajor', 'RCRI: 복강내 수술 해당'],
+          '탈장교정술 개복 (open hernia)':       ['intermediate', 'RCRI: 해당 없음'],
+          '탈장교정술 복강경 (lap hernia)':      ['intermediate', 'RCRI: 해당 없음'],
+        },
+        '간담췌 (Hepatobiliary)': {
+          '췌십이지장절제술 (Whipple)':          ['xmajor', 'RCRI: 복강내 수술 해당'],
+          '간절제술 (major hepatectomy)':        ['xmajor', 'RCRI: 복강내 수술 해당'],
+          '담낭절제술 복강경 (lap chole)':       ['major',  'RCRI: 해당 없음(복강경, ACC/AHA 2024 저위험)'],
+          '담낭절제술 개복 (open chole)':        ['major',  'RCRI: 복강내 수술 해당'],
+          '총담관 수술 (CBD exploration)':       ['major',  'RCRI: 복강내 수술 해당'],
+        },
+      }
+    },
+    EndoGI: {
+      label: 'Endoscopic gastrointestinal procedures', tgv: 1,
+      subs: {
+        '내시경 시술': {
+          '상부 내시경 (EGD)':                  ['minor',  'RCRI: 해당 없음'],
+          '대장내시경 (colonoscopy)':            ['minor',  'RCRI: 해당 없음'],
+          'ERCP':                               ['intermediate', 'RCRI: 해당 없음'],
+          'ESD / EMR':                          ['intermediate', 'RCRI: 해당 없음'],
+          '초음파 내시경 (EUS)':                ['minor',  'RCRI: 해당 없음'],
+        },
+      }
+    },
+    Bones: {
+      label: 'Bones, joints and connective tissue / tendon muscle', tgv: 0,
+      subs: {
+        '고관절/슬관절 치환 (Arthroplasty)': {
+          '고관절 전치환술 (THA)':              ['major',  'RCRI: 해당 없음(정형외과)'],
+          '슬관절 전치환술 (TKA)':              ['major',  'RCRI: 해당 없음(정형외과)'],
+          '고관절 반치환술 (bipolar hemi)':      ['major',  'RCRI: 해당 없음'],
+          '양측 동시 치환술 (bilateral)':        ['xmajor', 'RCRI: 해당 없음'],
+        },
+        '골절 고정술 (ORIF/IM nail)': {
+          '근위 대퇴골 (PFN / DHS / cephalo)': ['major',  'RCRI: 해당 없음'],
+          '대퇴골 간부 (fem shaft IM nail)':    ['major',  'RCRI: 해당 없음'],
+          '상완골 골절 (humerus ORIF)':         ['major',  'RCRI: 해당 없음'],
+          '경골/비골 (tibia/fibula)':            ['major',  'RCRI: 해당 없음'],
+          '요골/척골 (radius/ulna)':            ['intermediate', 'RCRI: 해당 없음'],
+        },
+        '척추 수술 (Spinal)': {
+          '척추 감압술 (decompression)':         ['major',  'RCRI: 해당 없음'],
+          '척추 유합술 1-2 levels':              ['major',  'RCRI: 해당 없음'],
+          '척추 유합술 multi-level':             ['xmajor', 'RCRI: 해당 없음'],
+          '척추 골절 고정 (fracture fixation)':  ['xmajor', 'RCRI: 해당 없음'],
+        },
+      }
+    },
+    Urinary: {
+      label: 'Urinary system and male reproductive organs', tgv: 0,
+      subs: {
+        '전립선': {
+          '근치적 전립선절제술 개복/복강경':     ['xmajor', 'RCRI: 복강내 수술 해당'],
+          '경요도 전립선절제 (TURP)':           ['minor',  'RCRI: 해당 없음'],
+          '경요도 레이저 (HoLEP/PVEP)':        ['intermediate', 'RCRI: 해당 없음'],
+        },
+        '신장': {
+          '근치적 신장절제술':                   ['major',  'RCRI: 복강내 수술 해당'],
+          '부분 신장절제술':                     ['major',  'RCRI: 복강내 수술 해당'],
+          '신장이식 (renal transplant)':         ['xmajor', 'RCRI: 복강내 수술 해당'],
+        },
+        '방광': {
+          '근치적 방광절제술 (radical cystectomy)': ['xmajor', 'RCRI: 복강내 수술 해당'],
+          '경요도 방광종양절제 (TURBT)':        ['minor',  'RCRI: 해당 없음'],
+        },
+      }
+    },
+    Female: {
+      label: 'Female reproductive organs', tgv: 0,
+      subs: {
+        '자궁/난소': {
+          '자궁절제술 개복 (open hysterectomy)': ['major',  'RCRI: 복강내 수술 해당'],
+          '자궁절제술 복강경':                   ['major',  'RCRI: 해당 없음(복강경)'],
+          '난소절제술 (oophorectomy)':           ['major',  'RCRI: 복강내 해당'],
+          '난소 종양 절제 (복강경)':             ['major',  'RCRI: 해당 없음(복강경)'],
+        },
+      }
+    },
+    Spine: {
+      label: 'Spine', tgv: 0,
+      subs: {
+        '척추 (Spine)': {
+          '경추 전방 수술 (ACDF)':              ['major',  'RCRI: 해당 없음'],
+          '요추 감압술':                         ['major',  'RCRI: 해당 없음'],
+          '척추 골절 고정':                      ['xmajor', 'RCRI: 해당 없음'],
+        },
+      }
+    },
+    FaceMouth: {
+      label: 'Face, mouth, salivary and thyroid', tgv: 0,
+      subs: {
+        '갑상선/부갑상선': {
+          '갑상선전절제술 (total thyroidectomy)': ['major', 'RCRI: 해당 없음'],
+          '갑상선엽절제술 (hemithyroidectomy)':  ['intermediate', 'RCRI: 해당 없음'],
+          '부갑상선절제술':                       ['intermediate', 'RCRI: 해당 없음'],
+        },
+        '두경부 종양': {
+          '두경부 종양 광범위 절제':              ['xmajor', 'RCRI: 해당 없음'],
+          '경부 림프절 곽청술 (neck dissection)': ['major', 'RCRI: 해당 없음'],
+        },
+      }
+    },
+    ENT: {
+      label: 'Ear, nose and throat', tgv: 0,
+      subs: {
+        '이비인후과': {
+          '비중격 교정술':                       ['minor',  'RCRI: 해당 없음'],
+          '편도절제술 (tonsillectomy)':          ['minor',  'RCRI: 해당 없음'],
+          '부비동 수술 FESS':                    ['intermediate', 'RCRI: 해당 없음'],
+          '고막성형술 / 중이 수술':              ['minor',  'RCRI: 해당 없음'],
+        },
+      }
+    },
+    Breast: {
+      label: 'Breast', tgv: 0,
+      subs: {
+        '유방': {
+          '부분절제술 (lumpectomy/BCS)':         ['intermediate', 'RCRI: 해당 없음'],
+          '유방절제술 (mastectomy)':             ['major',  'RCRI: 해당 없음'],
+          '유방재건술 (reconstruction)':         ['major',  'RCRI: 해당 없음'],
+        },
+      }
+    },
+    Skin: {
+      label: 'Skin and subcutaneous tissue', tgv: 0,
+      subs: {
+        '피부/연부조직': {
+          '피부 절제/생검':                      ['minor',  'RCRI: 해당 없음'],
+          '피부이식 (skin graft)':               ['intermediate', 'RCRI: 해당 없음'],
+          '연부조직 종양 절제':                  ['intermediate', 'RCRI: 해당 없음'],
+          '욕창 수술 (pressure sore)':           ['major',  'RCRI: 해당 없음'],
+        },
+      }
+    },
+    Neuro: {
+      label: 'Neurosurgery (Brain, cranium and intracranial organs)', tgv: 0,
+      subs: {
+        '뇌신경외과': {
+          '개두술 / 뇌종양 절제 (craniotomy)':  ['xmajor', 'RCRI: 해당 없음(두개내)'],
+          '뇌동맥류 클리핑':                     ['xmajor', 'RCRI: 해당 없음'],
+          '경막외/경막하 혈종 제거':             ['major',  'RCRI: 해당 없음'],
+          '뇌내 혈종 제거 (ICH evacuation)':    ['xmajor', 'RCRI: 해당 없음'],
+          'VP shunt 삽입':                       ['major',  'RCRI: 해당 없음'],
+        },
+      }
+    },
+  };
+
+  // severity → sort-severity 값 변환 (xmajor만 1, 나머지 0)
+  function sevToSortVal(sev) { return sev === 'xmajor' ? '1' : '0'; }
+  const SEV_LABEL = { minor:'Minor', intermediate:'Intermediate', major:'Major', xmajor:'Xmajor/Complex' };
+
+  function onMainGroup(key) {
+    const sg = document.getElementById('sort-subgroup');
+    const sp = document.getElementById('sort-proc');
+    const hint = document.getElementById('proc-hint');
+    sg.innerHTML = '<option value="">② Sub Group 선택...</option>';
+    sp.innerHTML = '<option value="">③ Procedure 선택...</option>';
+    sp.disabled = true;
+    hint.textContent = '';
+    hint.className = 'text-xs font-semibold mt-0.5 min-h-[1.1rem]';
+    if (!key || !SORT_PROCS[key]) { sg.disabled = true; return; }
+    const grp = SORT_PROCS[key];
+    // auto-set specialty from TGV
+    document.getElementById('sort-specialty').value = String(grp.tgv);
+    document.getElementById('sort-severity').value  = '0'; // reset until procedure chosen
+    Object.keys(grp.subs).forEach(sub => {
+      const opt = document.createElement('option'); opt.value = sub; opt.textContent = sub;
+      sg.appendChild(opt);
+    });
+    sg.disabled = false;
+    render();
+  }
+
+  function onSubGroup(sub) {
+    const key = document.getElementById('sort-maingroup').value;
+    const sp = document.getElementById('sort-proc');
+    const hint = document.getElementById('proc-hint');
+    sp.innerHTML = '<option value="">③ Procedure 선택...</option>';
+    hint.textContent = '';
+    if (!sub || !SORT_PROCS[key]?.subs[sub]) { sp.disabled = true; return; }
+    const procs = SORT_PROCS[key].subs[sub];
+    Object.keys(procs).forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = JSON.stringify([key, sub, name]);
+      opt.textContent = name;
+      sp.appendChild(opt);
+    });
+    sp.disabled = false;
+  }
+
+  function onProcedure(val) {
+    const hint = document.getElementById('proc-hint');
+    if (!val) { hint.textContent = ''; return; }
+    const [key, sub, name] = JSON.parse(val);
+    const [sev, rcriNote] = SORT_PROCS[key].subs[sub][name];
+    document.getElementById('sort-severity').value = sevToSortVal(sev);
+    const tgv = SORT_PROCS[key].tgv;
+    // severity badge color
+    const sevColor = sev === 'xmajor' ? 'text-red-700' : sev === 'major' ? 'text-yellow-700' : 'text-green-700';
+    hint.innerHTML = `<span class="${sevColor}">Severity: ${SEV_LABEL[sev]}</span>  ·  <span class="text-blue-700">Specialty(TGV): ${tgv?'Yes (GI/Thoracic/Vascular)':'No'}</span>  ·  <span class="text-gray-600">${rcriNote}</span>`;
+    render();
+  }
+
+  // ----------------------------------------------------------------
+  // SORT v2 계수 — 출처 명시
+  // ----------------------------------------------------------------
+  // SORT 원본: Protopapa et al., BJS 2014 (Table 4)  — β₀ = −7.366
+  const SORT_ORIG = {
+    b0:      -7.366,
+    asa:     { '1':0, '2':0, '3':1.411, '4':2.388, '5':4.081 },
+    urgency: { 'elective':0, 'expedited':1.236, 'urgent':1.657, 'immediate':2.452 },
+    specialty: 0.712,  // GI/thoracic/vascular
+    severity:  0.381,  // Complex major only
+    cancer:    0.667,
+    age:     { 'lt65':0, '65-79':0.777, 'gte80':1.591 },
+  };
+  // SORT v2 combined: Moonesinghe et al., PLOS Medicine 2020 (Table 3) — β₀ = −6.403
+  const SORT_V2 = {
+    b0:       -6.403,
+    sortCoef:  0.04028,  // per 1% SORT risk
+    clinician: { 'lt1':0, '1to2.5':1.487, '2.6to5':2.365, '5.1to10':3.074, '10.1to50':4.156, 'gt50':5.028 },
+    clinLabel: { 'lt1':'<1%', '1to2.5':'1-2.5%', '2.6to5':'2.6-5%', '5.1to10':'5.1-10%', '10.1to50':'10.1-50%', 'gt50':'>50%' },
+  };
+
+  // ================================================================
+  // RENDER FORMS
+  // ================================================================
+
+  function buildCheck(id, label, hint, badge='') {
+    return `<label class="check-item flex items-start gap-3 p-2.5 border border-gray-200 rounded-xl cursor-pointer transition">
+      <input type="checkbox" id="${id}" class="mt-0.5 w-4 h-4 accent-blue-700 flex-shrink-0" onchange="render()">
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium leading-snug">${label}</div>
+        ${hint?`<div class="text-xs text-gray-400 mt-0.5 leading-snug">${hint}</div>`:''}
+      </div>${badge}
+    </label>`;
+  }
+
+  function renderForms() {
+    document.getElementById('rcri-list').innerHTML =
+      RCRI_ITEMS.map(i => buildCheck(i.id, i.label, i.hint,
+        `<span class="text-xs font-bold text-blue-600 flex-shrink-0">+1</span>`)).join('');
+
+    document.getElementById('aub-list').innerHTML =
+      AUB_ITEMS.map(i => buildCheck(i.id, i.label, i.hint,
+        `<span class="text-xs font-bold text-blue-600 flex-shrink-0">+1</span>`)).join('');
+
+    document.getElementById('dasi-list').innerHTML =
+      DASI_ITEMS.map(i => buildCheck(i.id, i.label, '',
+        `<span class="text-xs font-bold text-blue-600 flex-shrink-0">+${i.w}</span>`)).join('');
+
+    renderCFS();
+    renderDrugs();
+  }
+
+  function renderCFS() {
+    document.getElementById('cfs-list').innerHTML = CFS_DATA.map(c => `
+      <div class="cfs-card border-2 border-gray-200 rounded-xl p-3" data-cfs="${c.s}" onclick="selectCFS(${c.s})">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <span class="text-2xl font-black text-blue-900 w-7 text-center leading-none">${c.s}</span>
+            <span class="text-sm font-bold ${c.color}">${c.label}</span>
+          </div>
+          <span class="text-xs ${c.color} font-semibold ml-2 flex-shrink-0">30d ${c.surv}%</span>
+        </div>
+        <div class="ml-9 text-xs text-gray-600 leading-snug">${c.desc}</div>
+        <div class="ml-9 text-xs text-gray-400 mt-0.5 italic leading-snug">${c.ex}</div>
+      </div>`).join('');
+  }
+
+  function renderDrugs() {
+    const cl = { maintain:'text-green-700', d1:'text-yellow-700', d3:'text-orange-700', stop:'text-red-700' };
+    const lb = { maintain:'유지', d1:'D-1', d3:'D-3', stop:'중단' };
+    document.getElementById('drug-list').innerHTML = DRUGS.map(d => `
+      <label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-1">
+        <input type="checkbox" id="${d.id}" data-cat="${d.cat}" class="w-4 h-4 flex-shrink-0" onchange="render()">
+        <span class="text-xs flex-1 leading-snug">${d.name}</span>
+        <span class="text-xs font-semibold ${cl[d.cat]} flex-shrink-0">${lb[d.cat]}</span>
+      </label>`).join('');
+    updateDrugCats();
+  }
+
+  function updateDrugCats() {
+    const cats = { maintain:[], d1:[], d3:[], stop:[] };
+    DRUGS.forEach(d => {
+      const el = document.getElementById(d.id);
+      if (el?.checked) cats[d.cat].push(d);
+    });
+    const el = (id, list) => {
+      document.getElementById(id).innerHTML = list.length
+        ? list.map(d=>`<li class="flex justify-between gap-1"><span>${d.disp}</span>${d.note?`<span class="text-gray-400">(${d.note})</span>`:''}</li>`).join('')
+        : '<li class="text-gray-400">없음</li>';
+    };
+    el('cat-maintain', cats.maintain);
+    el('cat-d1',       cats.d1);
+    el('cat-d3',       cats.d3);
+    el('cat-stop',     cats.stop);
+  }
+
+  // ================================================================
+  // CFS SELECTION
+  // ================================================================
+  let selectedCFS = null;
+
+  function selectCFS(n) {
+    selectedCFS = n;
+    document.querySelectorAll('.cfs-card').forEach(el =>
+      el.classList.toggle('selected', parseInt(el.dataset.cfs) === n));
+    const c = CFS_DATA.find(x => x.s === n);
+    const badge = document.getElementById('cfs-badge-box');
+    badge.innerHTML = `
+      <div class="text-3xl font-black ${c.color}">${c.s}</div>
+      <div class="text-xs font-bold ${c.color}">${c.label}</div>
+      <div class="text-xs text-gray-500">30d ${c.surv}%</div>`;
+    render();
+  }
+
+  // ================================================================
+  // AUTO-FILL from labs / basic info
+  // ================================================================
+  function autoFill() {
+    const age  = parseInt(document.getElementById('pt-age').value);
+    const hb   = parseFloat(document.getElementById('lab-hb').value);
+    const cr   = parseFloat(document.getElementById('lab-cr').value);
+    const emer = document.getElementById('emergency').value;
+
+    // AUB-HAS2 A1 (age ≥75) — 양방향 동기: 나이 변경 시 해제도 처리
+    const aubA1 = document.getElementById('aub_a1');
+    if (aubA1 && !isNaN(age) && age > 0) aubA1.checked = age >= 75;
+    else if (aubA1) aubA1.checked = false;
+
+    // AUB-HAS2 A2 (Hb <12)
+    const aubA2 = document.getElementById('aub_a2');
+    if (aubA2 && !isNaN(hb) && hb > 0) aubA2.checked = hb < 12;
+    else if (aubA2 && (isNaN(hb) || hb <= 0)) aubA2.checked = false;
+
+    // RCRI Cr ≥2
+    const rcriCr = document.getElementById('rcri_cr');
+    if (rcriCr && !isNaN(cr) && cr > 0) rcriCr.checked = cr >= 2.0;
+    else if (rcriCr && (isNaN(cr) || cr <= 0)) rcriCr.checked = false;
+
+    // AUB-HAS2 S2 (emergency/urgent)
+    const aubS2 = document.getElementById('aub_s2');
+    if (aubS2) aubS2.checked = (emer === 'urgent' || emer === 'emergency');
+
+    // SORT urgency sync
+    const urgMap = { elective:'elective', expedited:'expedited', urgent:'urgent', emergency:'immediate' };
+    const su = document.getElementById('sort-urgency');
+    if (su) su.value = urgMap[emer] || 'elective';
+
+    // SORT age sync — 나이 지워지면 lt65 기본값으로 복원
+    const sa = document.getElementById('sort-age');
+    if (sa) {
+      if (!isNaN(age) && age > 0)
+        sa.value = age >= 80 ? 'gte80' : age >= 65 ? '65-79' : 'lt65';
+      else
+        sa.value = 'lt65';
+    }
+
+    render();
+  }
+
+  // ================================================================
+  // CALCULATORS
+  // ================================================================
+
+  function calcRCRI(ids) {
+    const score = RCRI_ITEMS.filter(i => ids.has(i.id)).length;
+    const idx   = Math.min(score, 3);
+    return { score, ...RCRI_TABLE[idx] };
+  }
+
+  function calcAUB(ids) {
+    const score = AUB_ITEMS.filter(i => ids.has(i.id)).length;
+    const cat = score <= 1 ? 'LOW' : score <= 2 ? 'INTERMEDIATE' : 'HIGH';
+    const pct = score <= 1 ? '<5%' : score <= 2 ? '5-17%' : '>17%';
+    const color = score <= 1 ? 'risk-low' : score <= 2 ? 'risk-int' : 'risk-high';
+    return { score, cat, pct, color };
+  }
+
+  function calcDASI(ids) {
+    const total = DASI_ITEMS.reduce((s,i) => s + (ids.has(i.id) ? i.w : 0), 0);
+    const vo2   = 0.43 * total + 9.6;
+    const mets  = vo2 / 3.5;
+    return { total, vo2, mets, adequate: total >= 34 };
+  }
+
+  function calcCFS(n) { return n ? CFS_DATA.find(c => c.s === n) : null; }
+
+  function getCheckedDrugs() {
+    const cats = { maintain:[], d1:[], d3:[], stop:[] };
+    DRUGS.forEach(d => {
+      if (document.getElementById(d.id)?.checked) cats[d.cat].push(d);
+    });
+    return cats;
+  }
+
+  // SORT v2 direct logit calculation (clinician estimate 제거 — 객관 파라미터만 사용)
+  function calcSORTv2() {
+    const asa       = document.getElementById('sort-asa')?.value || '3';
+    const urgency   = document.getElementById('sort-urgency')?.value || 'elective';
+    const specialty = parseInt(document.getElementById('sort-specialty')?.value || '0');
+    const severity  = parseInt(document.getElementById('sort-severity')?.value || '0');
+    const cancer    = parseInt(document.getElementById('sort-cancer')?.value || '0');
+    const age       = document.getElementById('sort-age')?.value || 'lt65';
+
+    // Step 1 — SORT original logit (BJS 2014)
+    const sortLogit =
+      SORT_ORIG.b0
+      + (SORT_ORIG.asa[asa]         ?? 0)
+      + (SORT_ORIG.urgency[urgency] ?? 0)
+      + (specialty ? SORT_ORIG.specialty : 0)
+      + (severity  ? SORT_ORIG.severity  : 0)
+      + (cancer    ? SORT_ORIG.cancer    : 0)
+      + (SORT_ORIG.age[age]         ?? 0);
+    const sortRisk = 100 / (1 + Math.exp(-sortLogit));
+
+    // Step 2 — SORT v2 (PLOS Med 2020) clinician coef=0 (ref: <1%)
+    const v2Logit = SORT_V2.b0 + SORT_V2.sortCoef * sortRisk;
+    const v2Risk  = 100 / (1 + Math.exp(-v2Logit));
+
+    return { asa, urgency, specialty, severity, cancer, age,
+             sortLogit, sortRisk, v2Logit, v2Risk };
+  }
+
+  function fmtSORTFormula(s) {
+    const asaT  = s.asa <= '2' ? 'ref' : `+${SORT_ORIG.asa[s.asa]}`;
+    const urgT  = s.urgency === 'elective' ? 'ref' : `+${SORT_ORIG.urgency[s.urgency]}`;
+    const spT   = s.specialty ? `+${SORT_ORIG.specialty}` : '0';
+    const sevT  = s.severity  ? `+${SORT_ORIG.severity}`  : '0';
+    const canT  = s.cancer    ? `+${SORT_ORIG.cancer}`    : '0';
+    const ageT  = SORT_ORIG.age[s.age] ? `+${SORT_ORIG.age[s.age]}` : 'ref';
+    const urgLabel = { elective:'Elective', expedited:'Expedited', urgent:'Urgent', immediate:'Immediate' }[s.urgency];
+
+    return [
+      `── SORT (Protopapa et al., BJS 2014) ────────────────────────`,
+      `β₀ = ${SORT_ORIG.b0}`,
+      `  + ASA${s.asa}        (${asaT})`,
+      `  + urgency            (${urgT})  [${urgLabel}]`,
+      `  + specialty/TGV      (${spT})`,
+      `  + severity/Xmajor   (${sevT})`,
+      `  + cancer             (${canT})`,
+      `  + age                (${ageT})`,
+      `logit = ${s.sortLogit.toFixed(4)}`,
+      `30일 사망 = 1/(1+e^${(-s.sortLogit).toFixed(4)}) = ${s.sortRisk.toFixed(3)}%`,
+      ``,
+      `※ 객관 파라미터 기반 (임상의 추정 미포함) · AUC 0.82 (검증코호트)`,
+    ].join('\n');
+  }
+
+  // ================================================================
+  // SYNTHESIS ENGINE
+  // ================================================================
+
+  function synthesize(rcri, aub, dasi, cfs, sort) {
+    const alerts = [], lines = [];
+    const hb   = parseFloat(document.getElementById('lab-hb').value);
+    const emer = document.getElementById('emergency').value;
+
+    const discordant = (rcri.score >= 2 && aub.cat === 'LOW') || (rcri.score < 2 && aub.cat === 'HIGH');
+    if (discordant) {
+      lines.push(`• RCRI-AUB-HAS2 불일치 → AUB-HAS2 우선 적용 (AUC 0.82 vs 0.64)`);
+      alerts.push('⚠ RCRI vs AUB-HAS2 불일치 — AUB-HAS2 (더 민감) 기준으로 판단');
+    } else {
+      lines.push(`• RCRI ${rcri.score}점 / AUB-HAS2 ${aub.score}점 — 일치`);
+    }
+
+    if (!dasi.adequate) alerts.push('⚠ DASI <34점 (2024 ACC/AHA 기준 poor FC) — 비침습적 심혈관 검사 고려');
+    lines.push(`• FC: ${dasi.mets.toFixed(1)} METs / DASI ${dasi.total.toFixed(1)} → ${dasi.adequate ? 'adequate (DASI≥34, stress test 불필요)' : 'poor (DASI<34, 검사 고려)'}`);
+
+    if (cfs) {
+      const fl = cfs.s <= 3 ? 'fit/well' : cfs.s === 4 ? 'vulnerable' : 'frail';
+      lines.push(`• CFS ${cfs.s} (${cfs.label}) → ${fl}${cfs.s >= 5 ? ' — 마취과 협진 고려' : ''}`);
+      if (cfs.s >= 5) alerts.push(`⚠ CFS ${cfs.s} (frail) — 전신마취 위험 증가, 마취과 협진 고려`);
+    }
+
+    if (sort) {
+      lines.push(`• SORT: ${sort.sortRisk.toFixed(2)}% (BJS 2014 · 객관 모델)`);
+      if (sort.sortRisk >= 5) alerts.push(`⚠ SORT ≥5% (${sort.sortRisk.toFixed(2)}%) — 30일 사망 고위험`);
+    }
+
+    if (!isNaN(hb) && hb < 12) alerts.push('⚠ 빈혈 (Hb <12) — 술전 교정 고려');
+    if (aub.cat === 'HIGH') alerts.push('⚠ AUB-HAS2 HIGH — shared decision making 문서화 필요');
+    if (emer === 'urgent' || emer === 'emergency') alerts.push('⚠ 응급/긴박 수술 — risk-benefit 신중 평가');
+
+    const highRisk = aub.cat === 'HIGH' || rcri.score >= 3 || (sort && sort.sortRisk >= 5);
+    const poorFC   = !dasi.adequate;
+    const frail    = cfs && cfs.s >= 6;
+
+    let category, sub, recClass;
+    if (highRisk && (poorFC || frail)) {
+      category = 'HIGH RISK'; sub = '수술 연기 또는 다학제 검토 고려'; recClass = 'bg-red-50 border-red-400 text-red-900';
+    } else if (highRisk || aub.cat === 'INTERMEDIATE') {
+      category = 'ELEVATED but OPERABLE'; sub = 'FC adequate → 추가 stress test 불필요 · 술중 집중 모니터링'; recClass = 'bg-yellow-50 border-yellow-400 text-yellow-900';
+    } else {
+      category = 'OPERABLE'; sub = '저-중등도 위험 · 표준 술전 평가 충족'; recClass = 'bg-green-50 border-green-400 text-green-900';
+    }
+
+    return { category, sub, recClass, alerts, lines };
+  }
+
+  // ================================================================
+  // MAIN RENDER
+  // ================================================================
+
+  function render() {
+    const ids   = new Set();
+    document.querySelectorAll('input[type=checkbox]:checked').forEach(el => ids.add(el.id));
+
+    const rcri  = calcRCRI(ids);
+    const aub   = calcAUB(ids);
+    const dasi  = calcDASI(ids);
+    const cfs   = calcCFS(selectedCFS);
+    const sort  = calcSORTv2();
+    const drugs = getCheckedDrugs();
+
+    // RCRI
+    document.getElementById('rcri-score').textContent = rcri.score;
+    const rcriCls = document.getElementById('rcri-class');
+    rcriCls.textContent = rcri.class; rcriCls.className = `text-sm font-bold mt-1 ${rcri.color}`;
+    document.getElementById('rcri-risk').textContent = `30d MACE ${rcri.risk}`;
+
+    // AUB
+    document.getElementById('aub-score').textContent = aub.score;
+    const aubCls = document.getElementById('aub-class');
+    aubCls.textContent = aub.cat; aubCls.className = `text-sm font-bold mt-1 ${aub.color}`;
+    document.getElementById('aub-risk').textContent = `참고: 30d ${aub.pct}`;
+
+    // DASI
+    document.getElementById('dasi-mets').textContent = dasi.mets.toFixed(1);
+    const dasiSt = document.getElementById('dasi-status');
+    dasiSt.textContent = dasi.adequate ? '✅ adequate FC' : '⚠ poor FC';
+    dasiSt.className   = `text-sm font-bold mt-1 ${dasi.adequate ? 'text-green-600' : 'text-red-600'}`;
+    document.getElementById('dasi-detail').textContent = `총점 ${dasi.total.toFixed(2)} · VO₂ ${dasi.vo2.toFixed(1)} mL/kg/min`;
+    const df = document.getElementById('dasi-flag');
+    df.textContent = dasi.adequate ? 'DASI ≥34 ✅' : 'DASI <34 ⚠';
+    df.className   = `text-xs font-semibold ${dasi.adequate ? 'text-green-600' : 'text-orange-600'}`;
+
+    // SORT display (원본 객관 모델, BJS 2014)
+    const sv2 = sort.sortRisk;
+    const sv2Color = sv2 >= 5 ? 'text-red-600' : sv2 >= 1 ? 'text-yellow-600' : 'text-green-600';
+    const sv2El = document.getElementById('sort-v2-pct');
+    sv2El.textContent = `${sv2.toFixed(2)}`; sv2El.className = `text-3xl font-black ${sv2Color}`;
+    document.getElementById('sort-formula').textContent = fmtSORTFormula(sort);
+
+    // Header strip
+    document.getElementById('h-rcri').textContent = `${rcri.score}점 (${rcri.risk})`;
+    document.getElementById('h-aub').textContent  = `${aub.score}점 ${aub.cat}`;
+    document.getElementById('h-dasi').textContent = `${dasi.mets.toFixed(1)} METs`;
+    document.getElementById('h-cfs').textContent  = cfs ? `${cfs.s}` : '-';
+    document.getElementById('h-sort').textContent = `${sv2.toFixed(2)}%`;
+
+    // Drug cats
+    updateDrugCats();
+
+    // Synthesis + result table
+    const syn = synthesize(rcri, aub, dasi, cfs, sort);
+
+    document.getElementById('alerts-box').innerHTML = syn.alerts.length
+      ? syn.alerts.map(a=>`<div class="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-800 font-medium">${a}</div>`).join('')
+      : `<div class="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-800">✅ 주요 경고 없음</div>`;
+
+    document.getElementById('synthesis-text').innerHTML =
+      syn.lines.map(l=>`<div class="text-xs leading-relaxed">${l}</div>`).join('');
+
+    const rec = document.getElementById('final-rec');
+    rec.className = `rounded-2xl border-2 p-5 text-center mb-4 ${syn.recClass}`;
+    document.getElementById('final-label').textContent = syn.category;
+    document.getElementById('final-sub').textContent   = syn.sub;
+
+    // Result table
+    const rc  = rcri.score >= 3 ? 'text-red-600 font-bold' : rcri.score >= 2 ? 'text-yellow-600 font-bold' : 'text-green-600';
+    const ac  = aub.color === 'risk-high' ? 'text-red-600 font-bold' : aub.color === 'risk-int' ? 'text-yellow-600 font-bold' : 'text-green-600';
+    const dc  = dasi.adequate ? 'text-green-600' : 'text-red-600 font-bold';
+    const cc  = cfs ? (cfs.s >= 5 ? 'text-red-600 font-bold' : cfs.s === 4 ? 'text-yellow-600' : 'text-green-600') : '';
+    const sc  = sv2 >= 5 ? 'text-red-600 font-bold' : sv2 >= 1 ? 'text-yellow-600' : 'text-green-600';
+
+    document.getElementById('result-tbody').innerHTML = `
+      <tr>
+        <td class="p-2 border border-gray-200 font-semibold">RCRI</td>
+        <td class="p-2 border border-gray-200 text-center">${rcri.score}점</td>
+        <td class="p-2 border border-gray-200 text-center ${rc}">${rcri.class}</td>
+        <td class="p-2 border border-gray-200 text-xs">30d MACE ${rcri.risk}</td>
+      </tr>
+      <tr>
+        <td class="p-2 border border-gray-200 font-semibold">AUB-HAS2</td>
+        <td class="p-2 border border-gray-200 text-center">${aub.score}점</td>
+        <td class="p-2 border border-gray-200 text-center ${ac}">${aub.cat}</td>
+        <td class="p-2 border border-gray-200 text-xs">30d death/MI/stroke 참고 ${aub.pct}</td>
+      </tr>
+      <tr>
+        <td class="p-2 border border-gray-200 font-semibold">DASI</td>
+        <td class="p-2 border border-gray-200 text-center">${dasi.total.toFixed(1)}점</td>
+        <td class="p-2 border border-gray-200 text-center ${dc}">${dasi.adequate?'adequate':'poor'}</td>
+        <td class="p-2 border border-gray-200 text-xs">${dasi.mets.toFixed(1)} METs · VO₂ ${dasi.vo2.toFixed(1)} · ${dasi.adequate?'DASI≥34 ✓':'DASI<34 ⚠'}</td>
+      </tr>
+      ${cfs?`<tr>
+        <td class="p-2 border border-gray-200 font-semibold">CFS</td>
+        <td class="p-2 border border-gray-200 text-center">${cfs.s}</td>
+        <td class="p-2 border border-gray-200 text-center ${cc}">${cfs.label}</td>
+        <td class="p-2 border border-gray-200 text-xs">30d 생존 참고 ${cfs.surv}%</td>
+      </tr>`:''}
+      <tr class="bg-blue-50">
+        <td class="p-2 border border-gray-200 font-bold text-blue-900">SORT</td>
+        <td class="p-2 border border-gray-200 text-center font-bold">${sv2.toFixed(2)}%</td>
+        <td class="p-2 border border-gray-200 text-center font-bold ${sc}">${sv2>=5?'HIGH':sv2>=1?'INT':'LOW'}</td>
+        <td class="p-2 border border-gray-200 text-xs">30d mortality · BJS 2014 (Protopapa et al.) · 객관 모델</td>
+      </tr>
+    `;
+  }
+
+  // ================================================================
+  // EMR COPY
+  // ================================================================
+
+  function copyEMR() {
+    const ids   = new Set();
+    document.querySelectorAll('input[type=checkbox]:checked').forEach(el => ids.add(el.id));
+
+    const rcri  = calcRCRI(ids);
+    const aub   = calcAUB(ids);
+    const dasi  = calcDASI(ids);
+    const cfs   = calcCFS(selectedCFS);
+    const sort  = calcSORTv2();
+    const drugs = getCheckedDrugs();
+    const syn   = synthesize(rcri, aub, dasi, cfs, sort);
+
+    const sName = document.getElementById('surgery-name').value || '미입력';
+    const sDate = document.getElementById('surgery-date').value || '미입력';
+    const age   = document.getElementById('pt-age').value || '?';
+    const sex   = document.getElementById('pt-sex').value;
+    const emer  = document.getElementById('emergency').value;
+    const today = new Date().toLocaleDateString('ko-KR');
+
+    const dl = (list) => list.length ? list.map(d=>d.note?`${d.disp}(${d.note})`:d.disp).join(', ') : '없음';
+
+    const emr =
+`[수술전 심혈관 위험도 평가] ${today}
+===========================================
+환자: ${age}세/${sex}
+수술: ${sName} (${sDate}, ${emer})
+
+[Risk Score 결과]
+RCRI     : ${rcri.score}점 → ${rcri.class} (30d MACE ${rcri.risk})
+AUB-HAS2 : ${aub.score}점 → ${aub.cat} (30d 참고 ${aub.pct})  — AUC 0.82
+DASI     : ${dasi.total.toFixed(2)}점 → ${dasi.mets.toFixed(1)} METs / VO₂peak ${dasi.vo2.toFixed(1)} mL/kg/min
+           FC: ${dasi.adequate?'adequate (DASI≥34, stress test 불필요)':'poor (DASI<34, 비침습적 심혈관 검사 고려)'}
+CFS      : ${cfs?`${cfs.s} — ${cfs.label} (30d생존 참고 ${cfs.surv}%)`:'미입력'}
+SORT     : ${sort.sortRisk.toFixed(3)}%
+           출처: BJS 2014 (Protopapa et al.) · 객관 파라미터 기반 모델 (임상의 추정 미포함)
+
+[최종 판정]
+→ ${syn.category}
+   ${syn.sub}
+
+[종합해석]
+${syn.lines.join('\n')}
+
+[약물 관리]
+유지(수술 당일): ${dl(drugs.maintain)}
+D-1 보류(전날) : ${dl(drugs.d1)}
+D-3 보류(3일전): ${dl(drugs.d3)}
+중단(기간별)   : ${dl(drugs.stop)}
+
+[Alerts]
+${syn.alerts.length?syn.alerts.join('\n'):'주요 경고 없음'}
+
+[술후 모니터링]
+- TnT: baseline → POD1 → POD2
+- TnT ≥14 시 12-lead ECG 재시행
+- Glucose q6h (DM 환자)
+- BP/HR 목표: 수술 팀과 협의
+
+출처: NCS Surgery Check V2.1 / ACC/AHA 2024 / PLOS Med 2020
+※ AI-assisted — 임상 적용 전 원문 확인 권장`;
+
+    navigator.clipboard.writeText(emr).then(() => {
+      const btn = document.getElementById('copy-btn');
+      btn.textContent = '✅ 클립보드 복사 완료!';
+      btn.classList.add('bg-green-700');
+      setTimeout(() => {
+        btn.textContent = '📋 EMR 복사용 텍스트 생성 & 클립보드 복사';
+        btn.classList.remove('bg-green-700');
+      }, 2500);
+    }).catch(() => alert('클립보드 복사 실패. 아래 텍스트를 직접 복사하세요.'));
+
+    document.getElementById('emr-text').textContent = emr;
+    document.getElementById('emr-box').classList.remove('hidden');
+  }
+
+  // ================================================================
+  // RESET
+  // ================================================================
+
+  function resetAll() {
+    if (!confirm('모든 입력을 초기화하시겠습니까?')) return;
+    document.querySelectorAll('input[type=checkbox]').forEach(el => el.checked = false);
+    document.querySelectorAll('input[type=text], input[type=number], input[type=date]').forEach(el => el.value = '');
+    selectedCFS = null;
+    document.querySelectorAll('.cfs-card').forEach(el => el.classList.remove('selected'));
+    document.getElementById('cfs-badge-box').innerHTML = '';
+    document.getElementById('emr-box').classList.add('hidden');
+    document.getElementById('emergency').value     = 'elective';
+    document.getElementById('sort-asa').value      = '3';
+    document.getElementById('sort-urgency').value  = 'elective';
+    document.getElementById('sort-specialty').value= '0';
+    document.getElementById('sort-severity').value = '0';
+    document.getElementById('sort-cancer').value   = '0';
+    document.getElementById('sort-age').value      = 'lt65';
+    const _sg = document.getElementById('sort-subgroup');
+    const _sp = document.getElementById('sort-proc');
+    document.getElementById('sort-maingroup').value = '';
+    _sg.innerHTML = '<option value="">② Sub Group 선택...</option>'; _sg.disabled = true;
+    _sp.innerHTML = '<option value="">③ Procedure 선택...</option>';  _sp.disabled = true;
+    document.getElementById('proc-hint').textContent = '';
+    updateDrugCats();
+    render();
+  }
+
+  // ================================================================
+  // INIT
+  // ================================================================
+
+  document.addEventListener('DOMContentLoaded', () => {
+    renderForms();
+    render();
+    ['surgery-name', 'surgery-date', 'pt-sex'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', render);
+    });
+  });
+  </script>
+</body>
+</html>
