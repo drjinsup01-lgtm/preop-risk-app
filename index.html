@@ -56,7 +56,12 @@
         </div>
         <div>
           <label class="label">수술 예정일</label>
-          <input type="date" id="surgery-date" class="inp">
+          <div class="flex items-center gap-2">
+            <input type="date" id="surgery-date" class="inp flex-1">
+            <label class="flex items-center gap-1 text-xs text-gray-500 whitespace-nowrap cursor-pointer">
+              <input type="checkbox" id="surgery-date-tbd" onchange="toggleDateTBD()"> TBD
+            </label>
+          </div>
         </div>
         <div>
           <label class="label">응급 여부</label>
@@ -105,6 +110,8 @@
               <option value="Breast">Breast</option>
               <option value="Skin">Skin and subcutaneous tissue</option>
               <option value="Neuro">Neurosurgery (Brain, cranium and intracranial organs)</option>
+              <option disabled>──────────────────────────</option>
+              <option value="Other">기타 / 목록에 없는 수술</option>
             </select>
             <select id="sort-subgroup" class="inp" disabled onchange="onSubGroup(this.value)">
               <option value="">② Sub Group 선택...</option>
@@ -735,7 +742,36 @@
     sp.disabled = true;
     hint.textContent = '';
     hint.className = 'text-xs font-semibold mt-0.5 min-h-[1.1rem]';
-    if (!key || !SORT_PROCS[key]) { sg.disabled = true; return; }
+    if (!key) { sg.disabled = true; return; }
+    if (key === 'Other') {
+      sg.innerHTML = '<option>— 목록에 없는 수술 선택됨 —</option>';
+      sg.disabled = true;
+      sp.innerHTML = '<option>— 수술명은 위 "수술명" 필드에 직접 입력 —</option>';
+      sp.disabled = true;
+      document.getElementById('sort-specialty').value = '0';
+      document.getElementById('sort-severity').value  = '0';
+      hint.className = 'text-xs mt-1';
+      hint.innerHTML = `<div class="flex flex-wrap gap-x-5 gap-y-1 items-center p-2 bg-blue-50 rounded-lg border border-blue-200">
+        <span class="text-blue-800 font-semibold">SORT 직접 설정:</span>
+        <label class="flex items-center gap-1 text-gray-700 font-normal cursor-pointer">고위험 전문과(TGV)
+          <select id="other-tgv" class="ml-1 border border-gray-300 rounded px-1 text-xs bg-white" onchange="onOtherParam()">
+            <option value="0">No</option><option value="1">Yes (GI·흉부·혈관)</option>
+          </select>
+        </label>
+        <label class="flex items-center gap-1 text-gray-700 font-normal cursor-pointer">Complex Major
+          <select id="other-sev" class="ml-1 border border-gray-300 rounded px-1 text-xs bg-white" onchange="onOtherParam()">
+            <option value="0">No</option><option value="1">Yes (Xmajor)</option>
+          </select>
+        </label>
+        <label class="flex items-center gap-1 text-gray-700 font-normal cursor-pointer">
+          <input type="checkbox" id="other-rcri" onchange="onOtherParam()" class="w-3.5 h-3.5">
+          RCRI 고위험 수술
+        </label>
+      </div>`;
+      render();
+      return;
+    }
+    if (!SORT_PROCS[key]) { sg.disabled = true; return; }
     const grp = SORT_PROCS[key];
     // auto-set specialty from TGV
     document.getElementById('sort-specialty').value = String(grp.tgv);
@@ -776,6 +812,27 @@
     const sevColor = sev === 'xmajor' ? 'text-red-700' : sev === 'major' ? 'text-yellow-700' : 'text-green-700';
     hint.innerHTML = `<span class="${sevColor}">Severity: ${SEV_LABEL[sev]}</span>  ·  <span class="text-blue-700">Specialty(TGV): ${tgv?'Yes (GI/Thoracic/Vascular)':'No'}</span>  ·  <span class="text-gray-600">${rcriNote}</span>`;
     render();
+  }
+
+  // 기타 수술 직접 설정
+  function onOtherParam() {
+    const tgv = document.getElementById('other-tgv')?.value || '0';
+    const sev = document.getElementById('other-sev')?.value || '0';
+    document.getElementById('sort-specialty').value = tgv;
+    document.getElementById('sort-severity').value  = sev;
+    // RCRI 고위험 수술 자동 반영
+    const rcriOther = document.getElementById('other-rcri');
+    const rcriHi    = document.getElementById('rcri_hisurg');
+    if (rcriOther && rcriHi) rcriHi.checked = rcriOther.checked;
+    render();
+  }
+
+  // 수술 예정일 TBD 토글
+  function toggleDateTBD() {
+    const tbd = document.getElementById('surgery-date-tbd');
+    const dt  = document.getElementById('surgery-date');
+    if (tbd.checked) { dt.value = ''; dt.disabled = true; }
+    else             { dt.disabled = false; }
   }
 
   // ----------------------------------------------------------------
@@ -1203,7 +1260,9 @@
     const syn   = synthesize(rcri, aub, dasi, cfs, sort);
 
     const sName  = document.getElementById('surgery-name').value || '미입력';
-    const sDate  = document.getElementById('surgery-date').value || '미입력';
+    const sDate  = document.getElementById('surgery-date-tbd')?.checked
+                   ? 'TBD'
+                   : (document.getElementById('surgery-date').value || '미입력');
     const age    = document.getElementById('pt-age').value || '?';
     const sex    = document.getElementById('pt-sex').value;
     const emer   = document.getElementById('emergency').value;
@@ -1337,6 +1396,8 @@ NCS Surgery Check V2.1 / ACC/AHA 2024 / BJS 2014
     _sg.innerHTML = '<option value="">② Sub Group 선택...</option>'; _sg.disabled = true;
     _sp.innerHTML = '<option value="">③ Procedure 선택...</option>';  _sp.disabled = true;
     document.getElementById('proc-hint').textContent = '';
+    const _tbdEl = document.getElementById('surgery-date-tbd');
+    if (_tbdEl) { _tbdEl.checked = false; document.getElementById('surgery-date').disabled = false; }
     ['pt-dx','vs-sbp','vs-dbp','vs-hr','vs-rr','vs-bt',
      'lab-egfr','lab-k','lab-tnt','lab-probnp','lab-hba1c',
      'ecg-text','echo-ef','echo-text'].forEach(id => {
