@@ -277,20 +277,27 @@
         <div>
           <h2 class="text-blue-900 font-bold text-base flex items-center gap-2">
             <span class="bg-blue-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">7</span>
-            SORT — 로짓 직접 계산
+            SORT (Surgical Outcome Risk Tool)
           </h2>
           <p class="text-xs text-gray-400 mt-0.5 ml-8">
-            Protopapa et al., BJS 2014 · β₀=−7.366 · 객관 파라미터 기반 (임상의 추정 미포함) · AUC 0.82
+            BJS 2014 (Original) & PLOS Med 2020 (v2 Combined) · AUC 0.82-0.91
           </p>
         </div>
-        <div class="text-right min-w-[130px]">
-          <div class="text-xs text-gray-400">SORT 30일 사망</div>
-          <div class="text-3xl font-black" id="sort-v2-pct">-</div>
-          <div class="text-xs text-gray-500">% (BJS 2014)</div>
+        <div class="flex gap-4">
+          <div class="text-right">
+            <div class="text-[10px] text-gray-400 uppercase font-bold">SORT Original</div>
+            <div class="text-2xl font-black text-gray-700" id="sort-orig-pct">-</div>
+            <div class="text-[10px] text-gray-500">% (객관 지표)</div>
+          </div>
+          <div class="text-right border-l pl-4">
+            <div class="text-[10px] text-blue-500 uppercase font-bold">SORT v2 Combined</div>
+            <div class="text-3xl font-black text-blue-900" id="sort-v2-pct">-</div>
+            <div class="text-[10px] text-blue-500">% (객관+주관)</div>
+          </div>
         </div>
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <div>
           <label class="label">ASA-PS</label>
           <select id="sort-asa" class="inp" onchange="render()">
@@ -311,7 +318,7 @@
           </select>
         </div>
         <div>
-          <label class="label">고위험 전문과 <span class="text-gray-400 font-normal">(GI·흉부·혈관)</span></label>
+          <label class="label">고위험 전문과 <span class="text-gray-400 font-normal">(TGV)</span></label>
           <select id="sort-specialty" class="inp" onchange="render()">
             <option value="0">아니오</option>
             <option value="1">예</option>
@@ -338,6 +345,26 @@
             <option value="65-79">65 – 79세</option>
             <option value="gte80">≥ 80세</option>
           </select>
+        </div>
+        <div class="col-span-2">
+          <label class="label text-blue-700 font-bold">임상의 추정 위험도 (Clinician Estimate) <span class="text-blue-500 font-normal">— SORT v2 전용</span></label>
+          <select id="sort-clinician" class="inp border-blue-200 bg-blue-50" onchange="render()">
+            <option value="lt1">&lt; 1% (Low)</option>
+            <option value="1to2.5">1 – 2.5%</option>
+            <option value="2.6to5">2.6 – 5%</option>
+            <option value="5.1to10">5.1 – 10%</option>
+            <option value="10.1to50">10.1 – 50%</option>
+            <option value="gt50">&gt; 50% (Very High)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- SORT Discrepancy Alert -->
+      <div id="sort-alert" class="hidden mb-4 p-3 rounded-xl bg-orange-50 border border-orange-200 text-xs text-orange-800 flex items-center gap-2">
+        <span class="text-base">⚠</span>
+        <div>
+          <div class="font-bold text-orange-900">객관적 위험도 vs 임상의 추정치 불일치</div>
+          <div id="sort-alert-text"></div>
         </div>
       </div>
 
@@ -389,7 +416,7 @@
         class="bg-gray-200 hover:bg-gray-300 text-gray-600 px-6 py-2 rounded-xl text-sm transition">
         전체 초기화
       </button>
-      <p class="text-xs text-gray-400 mt-2">NCS Surgery Check V2.1 · ACC/AHA 2024 · BJS 2014</p>
+      <p class="text-xs text-gray-400 mt-2">NCS Surgery Check V2.1 · ACC/AHA 2024 · PLOS Med 2020</p>
     </div>
 
   </main>
@@ -1025,7 +1052,7 @@
     return cats;
   }
 
-  // SORT v2 direct logit calculation (clinician estimate 제거 — 객관 파라미터만 사용)
+  // SORT v2 direct logit calculation
   function calcSORTv2() {
     const asa       = document.getElementById('sort-asa')?.value || '3';
     const urgency   = document.getElementById('sort-urgency')?.value || 'elective';
@@ -1033,6 +1060,7 @@
     const severity  = parseInt(document.getElementById('sort-severity')?.value || '0');
     const cancer    = parseInt(document.getElementById('sort-cancer')?.value || '0');
     const age       = document.getElementById('sort-age')?.value || 'lt65';
+    const clinician = document.getElementById('sort-clinician')?.value || 'lt1';
 
     // Step 1 — SORT original logit (BJS 2014)
     const sortLogit =
@@ -1045,11 +1073,15 @@
       + (SORT_ORIG.age[age]         ?? 0);
     const sortRisk = 100 / (1 + Math.exp(-sortLogit));
 
-    // Step 2 — SORT v2 (PLOS Med 2020) clinician coef=0 (ref: <1%)
-    const v2Logit = SORT_V2.b0 + SORT_V2.sortCoef * sortRisk;
+    // Step 2 — SORT v2 (PLOS Med 2020) clinician coef
+    const clinicianCoef = SORT_V2.clinician[clinician] ?? 0;
+    const clinicianLabel = SORT_V2.clinLabel[clinician] || '<1%';
+    
+    const v2Logit = SORT_V2.b0 + SORT_V2.sortCoef * sortRisk + clinicianCoef;
     const v2Risk  = 100 / (1 + Math.exp(-v2Logit));
 
     return { asa, urgency, specialty, severity, cancer, age,
+             clinician, clinicianCoef, clinicianLabel,
              sortLogit, sortRisk, v2Logit, v2Risk };
   }
 
@@ -1057,30 +1089,31 @@
     const asaT  = s.asa <= '2' ? 'ref' : `+${SORT_ORIG.asa[s.asa]}`;
     const urgT  = s.urgency === 'elective' ? 'ref' : `+${SORT_ORIG.urgency[s.urgency]}`;
     const spT   = s.specialty ? `+${SORT_ORIG.specialty}` : '0';
-    const sevT  = s.severity  ? `+${SORT_ORIG.severity}`  : '0';
-    const canT  = s.cancer    ? `+${SORT_ORIG.cancer}`    : '0';
+    const sevT  = s.severity ? `+${SORT_ORIG.severity}` : '0';
+    const canT  = s.cancer ? `+${SORT_ORIG.cancer}` : '0';
     const ageT  = SORT_ORIG.age[s.age] ? `+${SORT_ORIG.age[s.age]}` : 'ref';
     const urgLabel = { elective:'Elective', expedited:'Expedited', urgent:'Urgent', immediate:'Immediate' }[s.urgency];
 
     return [
-      `── SORT (Protopapa et al., BJS 2014) ────────────────────────`,
-      `β₀ = ${SORT_ORIG.b0}`,
-      `  + ASA${s.asa}        (${asaT})`,
-      `  + urgency            (${urgT})  [${urgLabel}]`,
-      `  + specialty/TGV      (${spT})`,
-      `  + severity/Xmajor   (${sevT})`,
-      `  + cancer             (${canT})`,
-      `  + age                (${ageT})`,
+      `-- SORT orig (Protopapa et al., BJS 2014) --`,
+      `b0 = ${SORT_ORIG.b0}`,
+      `  + ASA${s.asa}              (${asaT})`,
+      `  + urgency              (${urgT}) [${urgLabel}]`,
+      `  + specialty/TGV        (${spT})`,
+      `  + severity/Xmajor      (${sevT})`,
+      `  + cancer               (${canT})`,
+      `  + age                  (${ageT})`,
       `logit = ${s.sortLogit.toFixed(4)}`,
-      `30일 사망 = 1/(1+e^${(-s.sortLogit).toFixed(4)}) = ${s.sortRisk.toFixed(3)}%`,
+      `30-day mortality = ${s.sortRisk.toFixed(3)}%`,
       ``,
-      `※ 객관 파라미터 기반 (임상의 추정 미포함) · AUC 0.82 (검증코호트)`,
+      `-- SORT v2 combined (Moonesinghe et al., PLOS Med 2020) --`,
+      `b0 = ${SORT_V2.b0}`,
+      `  + SORT risk            (${SORT_V2.sortCoef} x ${s.sortRisk.toFixed(3)})`,
+      `  + clinician estimate   (+${s.clinicianCoef.toFixed(3)}; ${s.clinicianLabel})`,
+      `logit = ${s.v2Logit.toFixed(4)}`,
+      `30-day mortality = ${s.v2Risk.toFixed(3)}%`,
     ].join('\n');
   }
-
-  // ================================================================
-  // SYNTHESIS ENGINE
-  // ================================================================
 
   function synthesize(rcri, aub, dasi, cfs, sort) {
     const alerts = [], lines = [];
@@ -1105,8 +1138,9 @@
     }
 
     if (sort) {
-      lines.push(`• SORT: ${sort.sortRisk.toFixed(2)}% (BJS 2014 · 객관 모델)`);
+      lines.push(`• SORT: ${sort.sortRisk.toFixed(2)}% (BJS 2014) / ${sort.v2Risk.toFixed(2)}% v2 (임상의 추정 ${sort.clinicianLabel})`);
       if (sort.sortRisk >= 5) alerts.push(`⚠ SORT ≥5% (${sort.sortRisk.toFixed(2)}%) — 30일 사망 고위험`);
+      if (sort.v2Risk >= 5 && sort.clinician !== 'lt1') alerts.push(`⚠ SORT v2 ≥5% (${sort.v2Risk.toFixed(2)}%) — 종합 위험도 고위험`);
     }
 
     if (!isNaN(hb) && hb < 12) alerts.push('⚠ 빈혈 (Hb <12) — 술전 교정 고려');
@@ -1129,10 +1163,6 @@
     return { category, sub, recClass, alerts, lines };
   }
 
-  // ================================================================
-  // MAIN RENDER
-  // ================================================================
-
   function render() {
     const ids   = new Set();
     document.querySelectorAll('input[type=checkbox]:checked').forEach(el => ids.add(el.id));
@@ -1142,50 +1172,61 @@
     const dasi  = calcDASI(ids);
     const cfs   = calcCFS(selectedCFS);
     const sort  = calcSORTv2();
-    const drugs = getCheckedDrugs();
 
-    // RCRI
     document.getElementById('rcri-score').textContent = rcri.score;
     const rcriCls = document.getElementById('rcri-class');
     rcriCls.textContent = rcri.class; rcriCls.className = `text-sm font-bold mt-1 ${rcri.color}`;
     document.getElementById('rcri-risk').textContent = `30d MACE ${rcri.risk}`;
 
-    // AUB
     document.getElementById('aub-score').textContent = aub.score;
     const aubCls = document.getElementById('aub-class');
     aubCls.textContent = aub.cat; aubCls.className = `text-sm font-bold mt-1 ${aub.color}`;
-    document.getElementById('aub-risk').textContent = `참고: 30d ${aub.pct}`;
+    document.getElementById('aub-risk').textContent = `Reference: 30d ${aub.pct}`;
 
-    // DASI
     document.getElementById('dasi-mets').textContent = dasi.mets.toFixed(1);
     const dasiSt = document.getElementById('dasi-status');
-    dasiSt.textContent = dasi.adequate ? '✅ adequate FC' : '⚠ poor FC';
+    dasiSt.textContent = dasi.adequate ? 'adequate FC' : 'poor FC';
     dasiSt.className   = `text-sm font-bold mt-1 ${dasi.adequate ? 'text-green-600' : 'text-red-600'}`;
-    document.getElementById('dasi-detail').textContent = `총점 ${dasi.total.toFixed(2)} · VO₂ ${dasi.vo2.toFixed(1)} mL/kg/min`;
+    document.getElementById('dasi-detail').textContent = `Total ${dasi.total.toFixed(2)} / VO2 ${dasi.vo2.toFixed(1)} mL/kg/min`;
     const df = document.getElementById('dasi-flag');
-    df.textContent = dasi.adequate ? 'DASI ≥34 ✅' : 'DASI <34 ⚠';
+    df.textContent = dasi.adequate ? 'DASI >=34' : 'DASI <34';
     df.className   = `text-xs font-semibold ${dasi.adequate ? 'text-green-600' : 'text-orange-600'}`;
 
-    // SORT display (원본 객관 모델, BJS 2014)
-    const sv2 = sort.sortRisk;
-    const sv2Color = sv2 >= 5 ? 'text-red-600' : sv2 >= 1 ? 'text-yellow-600' : 'text-green-600';
-    const sv2El = document.getElementById('sort-v2-pct');
-    sv2El.textContent = `${sv2.toFixed(2)}`; sv2El.className = `text-3xl font-black ${sv2Color}`;
+    const sortOrig = sort.sortRisk;
+    const sortV2 = sort.v2Risk;
+    const sortOrigColor = sortOrig >= 5 ? 'text-red-600' : sortOrig >= 1 ? 'text-yellow-600' : 'text-green-600';
+    const sortV2Color = sortV2 >= 5 ? 'text-red-600' : sortV2 >= 1 ? 'text-yellow-600' : 'text-green-600';
+    const sortOrigEl = document.getElementById('sort-orig-pct');
+    const sortV2El = document.getElementById('sort-v2-pct');
+    if (sortOrigEl) {
+      sortOrigEl.textContent = `${sortOrig.toFixed(2)}`;
+      sortOrigEl.className = `text-3xl font-black ${sortOrigColor}`;
+    }
+    if (sortV2El) {
+      sortV2El.textContent = `${sortV2.toFixed(2)}`;
+      sortV2El.className = `text-3xl font-black ${sortV2Color}`;
+    }
     document.getElementById('sort-formula').textContent = fmtSORTFormula(sort);
 
-    // Header strip
+    // Discrepancy alert: SORT orig vs clinician estimate
+    const sortAlertBox = document.getElementById('sort-alert');
+    const sortAlertTxt = document.getElementById('sort-alert-text');
+    if (sortAlertBox && sortAlertTxt) {
+      const clinMid = { 'lt1':0.5, '1to2.5':1.75, '2.6to5':3.8, '5.1to10':7.5, '10.1to50':30, 'gt50':75 }[sort.clinician];
+      const mismatch = sort.clinician !== 'lt1' && Math.abs(sortOrig - clinMid) > clinMid * 1.5;
+      sortAlertTxt.textContent = `SORT 객관 ${sortOrig.toFixed(2)}% vs 임상의 추정 ${sort.clinicianLabel} — 파라미터 확인 권장`;
+      sortAlertBox.classList.toggle('hidden', !mismatch);
+    }
+
     document.getElementById('h-rcri').textContent = `${rcri.score}점 (${rcri.risk})`;
     document.getElementById('h-aub').textContent  = `${aub.score}점 ${aub.cat}`;
     document.getElementById('h-dasi').textContent = `${dasi.mets.toFixed(1)} METs`;
     document.getElementById('h-cfs').textContent  = cfs ? `${cfs.s}` : '-';
-    document.getElementById('h-sort').textContent = `${sv2.toFixed(2)}%`;
+    document.getElementById('h-sort').textContent = `${sortOrig.toFixed(2)}% / ${sortV2.toFixed(2)}%`;
 
-    // Drug cats
     updateDrugCats();
 
-    // Synthesis + result table
     const syn = synthesize(rcri, aub, dasi, cfs, sort);
-
     document.getElementById('alerts-box').innerHTML = syn.alerts.length
       ? syn.alerts.map(a=>`<div class="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-800 font-medium">${a}</div>`).join('')
       : `<div class="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-800">✅ 주요 경고 없음</div>`;
@@ -1198,50 +1239,52 @@
     document.getElementById('final-label').textContent = syn.category;
     document.getElementById('final-sub').textContent   = syn.sub;
 
-    // Result table
     const rc  = rcri.score >= 3 ? 'text-red-600 font-bold' : rcri.score >= 2 ? 'text-yellow-600 font-bold' : 'text-green-600';
     const ac  = aub.color === 'risk-high' ? 'text-red-600 font-bold' : aub.color === 'risk-int' ? 'text-yellow-600 font-bold' : 'text-green-600';
     const dc  = dasi.adequate ? 'text-green-600' : 'text-red-600 font-bold';
     const cc  = cfs ? (cfs.s >= 5 ? 'text-red-600 font-bold' : cfs.s === 4 ? 'text-yellow-600' : 'text-green-600') : '';
-    const sc  = sv2 >= 5 ? 'text-red-600 font-bold' : sv2 >= 1 ? 'text-yellow-600' : 'text-green-600';
+    const scOrig = sortOrig >= 5 ? 'text-red-600 font-bold' : sortOrig >= 1 ? 'text-yellow-600' : 'text-green-600';
+    const scV2   = sortV2 >= 5 ? 'text-red-600 font-bold' : sortV2 >= 1 ? 'text-yellow-600' : 'text-green-600';
 
     document.getElementById('result-tbody').innerHTML = `
       <tr>
         <td class="p-2 border border-gray-200 font-semibold">RCRI</td>
-        <td class="p-2 border border-gray-200 text-center">${rcri.score}점</td>
+        <td class="p-2 border border-gray-200 text-center">${rcri.score}</td>
         <td class="p-2 border border-gray-200 text-center ${rc}">${rcri.class}</td>
         <td class="p-2 border border-gray-200 text-xs">30d MACE ${rcri.risk}</td>
       </tr>
       <tr>
         <td class="p-2 border border-gray-200 font-semibold">AUB-HAS2</td>
-        <td class="p-2 border border-gray-200 text-center">${aub.score}점</td>
+        <td class="p-2 border border-gray-200 text-center">${aub.score}</td>
         <td class="p-2 border border-gray-200 text-center ${ac}">${aub.cat}</td>
-        <td class="p-2 border border-gray-200 text-xs">30d death/MI/stroke 참고 ${aub.pct}</td>
+        <td class="p-2 border border-gray-200 text-xs">30d death/MI/stroke reference ${aub.pct}</td>
       </tr>
       <tr>
         <td class="p-2 border border-gray-200 font-semibold">DASI</td>
-        <td class="p-2 border border-gray-200 text-center">${dasi.total.toFixed(1)}점</td>
-        <td class="p-2 border border-gray-200 text-center ${dc}">${dasi.adequate?'adequate':'poor'}</td>
-        <td class="p-2 border border-gray-200 text-xs">${dasi.mets.toFixed(1)} METs · VO₂ ${dasi.vo2.toFixed(1)} · ${dasi.adequate?'DASI≥34 ✓':'DASI<34 ⚠'}</td>
+        <td class="p-2 border border-gray-200 text-center">${dasi.total.toFixed(1)}</td>
+        <td class="p-2 border border-gray-200 text-center ${dc}">${dasi.adequate ? 'adequate' : 'poor'}</td>
+        <td class="p-2 border border-gray-200 text-xs">${dasi.mets.toFixed(1)} METs / VO2 ${dasi.vo2.toFixed(1)}</td>
       </tr>
-      ${cfs?`<tr>
+      ${cfs ? `<tr>
         <td class="p-2 border border-gray-200 font-semibold">CFS</td>
         <td class="p-2 border border-gray-200 text-center">${cfs.s}</td>
         <td class="p-2 border border-gray-200 text-center ${cc}">${cfs.label}</td>
-        <td class="p-2 border border-gray-200 text-xs">30d 생존 참고 ${cfs.surv}%</td>
-      </tr>`:''}
+        <td class="p-2 border border-gray-200 text-xs">30d survival reference ${cfs.surv}%</td>
+      </tr>` : ''}
       <tr class="bg-blue-50">
-        <td class="p-2 border border-gray-200 font-bold text-blue-900">SORT</td>
-        <td class="p-2 border border-gray-200 text-center font-bold">${sv2.toFixed(2)}%</td>
-        <td class="p-2 border border-gray-200 text-center font-bold ${sc}">${sv2>=5?'HIGH':sv2>=1?'INT':'LOW'}</td>
-        <td class="p-2 border border-gray-200 text-xs">30d mortality · BJS 2014 (Protopapa et al.) · 객관 모델</td>
+        <td class="p-2 border border-gray-200 font-bold text-blue-900">SORT orig</td>
+        <td class="p-2 border border-gray-200 text-center font-bold">${sortOrig.toFixed(2)}%</td>
+        <td class="p-2 border border-gray-200 text-center font-bold ${scOrig}">${sortOrig >= 5 ? 'HIGH' : sortOrig >= 1 ? 'INT' : 'LOW'}</td>
+        <td class="p-2 border border-gray-200 text-xs">30d mortality / BJS 2014 objective model</td>
+      </tr>
+      <tr class="bg-indigo-50">
+        <td class="p-2 border border-gray-200 font-bold text-indigo-900">SORT v2</td>
+        <td class="p-2 border border-gray-200 text-center font-bold">${sortV2.toFixed(2)}%</td>
+        <td class="p-2 border border-gray-200 text-center font-bold ${scV2}">${sortV2 >= 5 ? 'HIGH' : sortV2 >= 1 ? 'INT' : 'LOW'}</td>
+        <td class="p-2 border border-gray-200 text-xs">30d mortality / PLOS Med 2020 combined / clinician ${sort.clinicianLabel}</td>
       </tr>
     `;
   }
-
-  // ================================================================
-  // EMR COPY
-  // ================================================================
 
   function copyEMR() {
     const ids   = new Set();
@@ -1255,16 +1298,13 @@
     const drugs = getCheckedDrugs();
     const syn   = synthesize(rcri, aub, dasi, cfs, sort);
 
-    const sName  = document.getElementById('surgery-name').value || '미입력';
-    const sDate  = document.getElementById('surgery-date-tbd')?.checked
-                   ? 'TBD'
-                   : (document.getElementById('surgery-date').value || '미입력');
+    const sName  = document.getElementById('surgery-name').value || 'Not entered';
+    const sDate  = document.getElementById('surgery-date-tbd')?.checked ? 'TBD' : (document.getElementById('surgery-date').value || 'Not entered');
     const age    = document.getElementById('pt-age').value || '?';
     const sex    = document.getElementById('pt-sex').value;
     const emer   = document.getElementById('emergency').value;
     const today  = new Date().toLocaleDateString('ko-KR');
 
-    // New fields
     const dx     = document.getElementById('pt-dx').value;
     const sbp    = document.getElementById('vs-sbp').value;
     const dbp    = document.getElementById('vs-dbp').value;
@@ -1278,28 +1318,22 @@
     const tnt    = document.getElementById('lab-tnt').value;
     const probnp = document.getElementById('lab-probnp').value;
     const hba1c  = document.getElementById('lab-hba1c').value;
-    const ecgTxt = document.getElementById('ecg-text').value || '미시행';
+    const ecgTxt = document.getElementById('ecg-text').value || 'Not entered';
     const echoEf = document.getElementById('echo-ef').value;
     const echoTx = document.getElementById('echo-text').value;
 
-    // Format VS: SBP/DBP-HR-RR-BT
-    const vsStr = (sbp && dbp && hrVal)
-      ? `${sbp}/${dbp}-${hrVal}${rr?'-'+rr:''}${bt?'-'+bt:''}`
-      : '미입력';
-
-    // Format Labs
+    const vsStr = (sbp && dbp && hrVal) ? `${sbp}/${dbp}-${hrVal}${rr ? '-'+rr : ''}${bt ? '-'+bt : ''}` : 'Not entered';
     const labParts = [];
-    if (hb)     labParts.push(`Hb ${hb}`);
-    if (cr)     labParts.push(`Cr ${cr}`);
-    if (egfr)   labParts.push(`eGFR ${egfr}`);
-    if (labK)   labParts.push(`K ${labK}`);
-    if (tnt)    labParts.push(`TnT ${tnt}`);
+    if (hb) labParts.push(`Hb ${hb}`);
+    if (cr) labParts.push(`Cr ${cr}`);
+    if (egfr) labParts.push(`eGFR ${egfr}`);
+    if (labK) labParts.push(`K ${labK}`);
+    if (tnt) labParts.push(`TnT ${tnt}`);
     if (probnp) labParts.push(`proBNP ${probnp}`);
-    if (hba1c)  labParts.push(`HbA1c ${hba1c}%`);
-    const labStr = labParts.length ? labParts.join(', ') : '미입력';
+    if (hba1c) labParts.push(`HbA1c ${hba1c}%`);
+    const labStr = labParts.length ? labParts.join(', ') : 'Not entered';
 
-    // Format Echo
-    let echoStr = '미시행';
+    let echoStr = 'Not entered';
     if (echoEf || echoTx) {
       const parts = [];
       if (echoEf) parts.push(`LVEF ${echoEf}%`);
@@ -1307,9 +1341,7 @@
       echoStr = parts.join(', ');
     }
 
-    // Preop risk summary line (A섹션용)
-    const preopRisk = `RCRI ${rcri.score}점 (${rcri.class}, MACE ${rcri.risk}), AUB-HAS2 ${aub.score}점 (${aub.cat}), DASI ${dasi.mets.toFixed(1)} METs (${dasi.adequate?'adequate':'poor'}), CFS ${cfs?cfs.s:'-'}, SORT ${sort.sortRisk.toFixed(2)}%`;
-
+    const preopRisk = `RCRI ${rcri.score}점 (${rcri.class}, MACE ${rcri.risk}), AUB-HAS2 ${aub.score}점 (${aub.cat}), DASI ${dasi.mets.toFixed(1)} METs (${dasi.adequate?'adequate':'poor'}), CFS ${cfs?cfs.s:'-'}, SORT ${sort.sortRisk.toFixed(2)}%/${sort.v2Risk.toFixed(2)}% v2`;
     const dl = (list) => list.length ? list.map(d=>d.note?`${d.disp}(${d.note})`:d.disp).join(', ') : '없음';
 
     const emr =
@@ -1340,9 +1372,9 @@ RCRI     : ${rcri.score}점 → ${rcri.class} (${rcri.risk})
 AUB-HAS2 : ${aub.score}점 → ${aub.cat} (${aub.pct})
 DASI     : ${dasi.total.toFixed(1)}점 → ${dasi.mets.toFixed(1)} METs (${dasi.adequate?'adequate':'poor'})
 CFS      : ${cfs?`${cfs.s} — ${cfs.label}`:'미입력'}
-SORT     : ${sort.sortRisk.toFixed(2)}% (BJS 2014)
+SORT     : ${sort.sortRisk.toFixed(2)}% (BJS 2014 객관) / ${sort.v2Risk.toFixed(2)}% v2 (PLOS Med 2020, 임상의 추정 ${sort.clinicianLabel})
 
-NCS Surgery Check V2.1 / ACC/AHA 2024 / BJS 2014`;
+NCS Surgery Check V2.1 / ACC/AHA 2024 / BJS 2014 / PLOS Med 2020`;
 
     navigator.clipboard.writeText(emr).then(() => {
       const btn = document.getElementById('copy-btn');
@@ -1377,6 +1409,7 @@ NCS Surgery Check V2.1 / ACC/AHA 2024 / BJS 2014`;
     document.getElementById('sort-severity').value = '0';
     document.getElementById('sort-cancer').value   = '0';
     document.getElementById('sort-age').value      = 'lt65';
+    document.getElementById('sort-clinician').value = 'lt1';
     const _sg = document.getElementById('sort-subgroup');
     const _sp = document.getElementById('sort-proc');
     document.getElementById('sort-maingroup').value = '';
